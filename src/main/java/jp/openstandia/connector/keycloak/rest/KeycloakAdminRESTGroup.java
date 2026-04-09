@@ -302,7 +302,7 @@ public class KeycloakAdminRESTGroup implements KeycloakClient.Group {
             }
 
             for (GroupRepresentation rep : results) {
-                if (rep.getName().equalsIgnoreCase(name.getNameValue())) {
+                if (rep.getName() != null && rep.getName().equalsIgnoreCase(name.getNameValue())) {
                     // Found
                     handler.handle(toConnectorObject(schema, realmName, rep, attributesToGet, allowPartialAttributeValues, queryPageSize));
                     return;
@@ -405,7 +405,7 @@ public class KeycloakAdminRESTGroup implements KeycloakClient.Group {
             }
 
             for (GroupRepresentation rep : results) {
-                if (rep.getName().equalsIgnoreCase(parentGroupName)) {
+                if (rep.getName() != null && rep.getName().equalsIgnoreCase(parentGroupName)) {
                     List<GroupRepresentation> subGroups = rep.getSubGroups();
                     if (subGroups != null) {
                         Optional<GroupRepresentation> sub = subGroups.stream().filter(g -> g.getId().equalsIgnoreCase(groupId)).findFirst();

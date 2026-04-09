@@ -78,7 +78,6 @@ class KeycloakUserIT extends AbstractKeycloakIT {
     }
 
     @Test
-    @Disabled("Password update via user credentials returns 400 against KC 26 - needs passwordResetAPIEnabled or KC 26 password policy investigation")
     void updateUser_password_succeeds() {
         Uid uid = connector.create(USER_OBJECT_CLASS, userAttrs("pwd-user"), null);
 
@@ -144,7 +143,6 @@ class KeycloakUserIT extends AbstractKeycloakIT {
     }
 
     @Test
-    @Disabled("Depends on group creation which fails with HTTP 400 against KC 26")
     void userGroupMembership() {
         // Create a group
         Set<Attribute> groupAttrs = new HashSet<>();

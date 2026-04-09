@@ -88,7 +88,6 @@ class KeycloakClientIT extends AbstractKeycloakIT {
     }
 
     @Test
-    @Disabled("NPE in connector: ClientRepresentation.getName() returns null for clients without explicit name set")
     void searchClientByName() {
         connector.create(CLIENT_OBJECT_CLASS, clientAttrs("find-client-by-name"), null);
 

@@ -15,7 +15,6 @@ import static org.junit.jupiter.api.Assertions.*;
 // Direct KC admin client group creation works fine. The issue is in the
 // connector's custom ResteasyClient serialization of GroupRepresentation.
 // User, Client, and ClientRole CRUD all work correctly.
-@Disabled("Group operations fail with HTTP 400 against KC 26 - connector serialization bug")
 class KeycloakGroupIT extends AbstractKeycloakIT {
 
     static final String REALM = "test-group";

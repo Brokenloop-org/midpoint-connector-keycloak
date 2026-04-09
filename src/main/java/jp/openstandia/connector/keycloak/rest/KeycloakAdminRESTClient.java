@@ -385,7 +385,7 @@ public class KeycloakAdminRESTClient implements KeycloakClient.Client {
         List<ClientRepresentation> results = clients.findByClientId(name.getNameValue());
 
         for (ClientRepresentation rep : results) {
-            if (rep.getName().equalsIgnoreCase(name.getNameValue())) {
+            if (rep.getClientId() != null && rep.getClientId().equalsIgnoreCase(name.getNameValue())) {
                 // Found
                 handler.handle(toConnectorObject(schema, realmName, rep, attributesToGet, allowPartialAttributeValues, queryPageSize));
                 return;

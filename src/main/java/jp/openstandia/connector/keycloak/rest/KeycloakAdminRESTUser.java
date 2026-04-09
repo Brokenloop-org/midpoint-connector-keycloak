@@ -208,6 +208,7 @@ public class KeycloakAdminRESTUser implements KeycloakClient.User {
         List<String> addGroupIds = new ArrayList<>();
         List<String> removeGroupIds = new ArrayList<>();
         CredentialRepresentation credential = null;
+        boolean userAttributeChanged = false;
 
         try {
             UserResource user = usersResource.get(uid.getUidValue());
@@ -220,9 +221,11 @@ public class KeycloakAdminRESTUser implements KeycloakClient.User {
 
                 } else if (delta.getName().equals(Name.NAME)) {
                     current.setUsername(AttributeDeltaUtil.getAsStringValue(delta));
+                    userAttributeChanged = true;
 
                 } else if (delta.getName().equals(ENABLE_NAME)) {
                     current.setEnabled(AttributeDeltaUtil.getBooleanValue(delta));
+                    userAttributeChanged = true;
 
                 } else if (delta.getName().equals(OperationalAttributes.PASSWORD_NAME)) {
                     List<CredentialRepresentation> credentials = new ArrayList<>();
@@ -240,15 +243,19 @@ public class KeycloakAdminRESTUser implements KeycloakClient.User {
 
                 } else if (delta.getName().equals(ATTR_EMAIL)) {
                     current.setEmail(toKeycloakValue(schema.userSchema, delta));
+                    userAttributeChanged = true;
 
                 } else if (delta.getName().equals(ATTR_EMAIL_VERIFIED)) {
                     current.setEmailVerified(AttributeDeltaUtil.getBooleanValue(delta));
+                    userAttributeChanged = true;
 
                 } else if (delta.getName().equals(ATTR_FIRST_NAME)) {
                     current.setFirstName(toKeycloakValue(schema.userSchema, delta));
+                    userAttributeChanged = true;
 
                 } else if (delta.getName().equals(ATTR_LAST_NAME)) {
                     current.setLastName(toKeycloakValue(schema.userSchema, delta));
+                    userAttributeChanged = true;
 
                 } else if (delta.getName().equals(ATTR_GROUPS)) {
                     if (delta.getValuesToAdd() != null) {
@@ -263,6 +270,7 @@ public class KeycloakAdminRESTUser implements KeycloakClient.User {
                     }
 
                 } else if (schema.isUserSchema(delta)) {
+                    userAttributeChanged = true;
                     if (schema.isMultiValuedUserSchema(delta)) {
                         Map<String, List<String>> attrs = current.getAttributes();
                         if (attrs == null) {
@@ -297,17 +305,18 @@ public class KeycloakAdminRESTUser implements KeycloakClient.User {
                 }
             }
 
-            if (configuration.isPasswordResetAPIEnabled()) {
-                List<CredentialRepresentation> credentials = current.getCredentials();
-                if (credentials != null && credentials.size() == 1) {
-                    credential = credentials.get(0);
-                }
-                // Need to remove credentials when using password reset API for setting the password.
-                current.setCredentials(null);
+            // Always extract and clear credentials before the user update call.
+            // KC 26 rejects credentials in the user update payload; passwords must be
+            // set separately via the resetPassword API.
+            List<CredentialRepresentation> credentials = current.getCredentials();
+            if (credentials != null && credentials.size() == 1) {
+                credential = credentials.get(0);
             }
+            current.setCredentials(null);
 
-            // TODO Optimize update if no diff{
-            user.update(current);
+            if (userAttributeChanged) {
+                user.update(current);
+            }
 
         } catch (NotFoundException e) {
             LOGGER.warn("Not found user when updating. uid: {0}", uid);
