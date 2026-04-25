@@ -23,7 +23,7 @@
         realm role and Organization object classes, comprehensive test suite,
         and Nix-based development environment.
     </description>
-    <url>https://github.com/brokenloop/midpoint-connector-keycloak</url>
+    <url>https://github.com/Brokenloop-org/midpoint-connector-keycloak</url>
 
     <licenses>
         <license>
@@ -34,16 +34,16 @@
     </licenses>
 
     <scm>
-        <connection>scm:git:https://github.com/brokenloop/midpoint-connector-keycloak.git</connection>
-        <developerConnection>scm:git:https://github.com/brokenloop/midpoint-connector-keycloak.git</developerConnection>
-        <url>https://github.com/brokenloop/midpoint-connector-keycloak</url>
+        <connection>scm:git:https://github.com/Brokenloop-org/midpoint-connector-keycloak.git</connection>
+        <developerConnection>scm:git:https://github.com/Brokenloop-org/midpoint-connector-keycloak.git</developerConnection>
+        <url>https://github.com/Brokenloop-org/midpoint-connector-keycloak</url>
     </scm>
 
     <distributionManagement>
         <repository>
             <id>github</id>
             <name>GitHub Packages</name>
-            <url>https://maven.pkg.github.com/brokenloop/midpoint-connector-keycloak</url>
+            <url>https://maven.pkg.github.com/Brokenloop-org/midpoint-connector-keycloak</url>
         </repository>
     </distributionManagement>
 
