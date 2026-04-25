@@ -91,6 +91,16 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>2.22.2</version>
+                <configuration>
+                    <!-- The midpoint48 profile pulls in admin-gui which ships a
+                         logback.xml writing to ${midpoint.home}/log/midpoint.log.
+                         Without this property set, logback substitutes the literal
+                         "midpoint.home_IS_UNDEFINED" as the directory name. Route
+                         the logs into target/ instead so they get cleaned with mvn clean. -->
+                    <systemPropertyVariables>
+                        <midpoint.home>${project.build.directory}/midpoint-home</midpoint.home>
+                    </systemPropertyVariables>
+                </configuration>
                 <dependencies>
                     <dependency>
                         <groupId>org.apache.maven.surefire</groupId>
@@ -104,6 +114,11 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-failsafe-plugin</artifactId>
                 <version>2.22.2</version>
+                <configuration>
+                    <systemPropertyVariables>
+                        <midpoint.home>${project.build.directory}/midpoint-home</midpoint.home>
+                    </systemPropertyVariables>
+                </configuration>
                 <dependencies>
                     <dependency>
                         <groupId>org.apache.maven.surefire</groupId>

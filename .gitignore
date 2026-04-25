@@ -1,4 +1,6 @@
 target
 *.jar
 .idea
+.claude/
+midpoint.home_IS_UNDEFINED/
 
