@@ -136,6 +136,13 @@ class KeycloakPaginationIT extends AbstractKeycloakIT {
         assertTrue(signalReceived.get());
     }
 
+    // Note: the off-by-one fix in getUser(Name)/getGroup(Name) is largely defensive --
+    // KC enforces unique names per realm, so the substring search that drives those
+    // paginated loops returns at most one exact match, which always fits in the first
+    // page. The fix is still correct (would manifest if a future KC version changed
+    // search semantics or if non-unique synthesized names appeared) but is not
+    // directly exercisable as an integration test against a stock Keycloak realm.
+
     @Test
     void getUsers_earlyTermination_whenHandlerReturnsFalse() {
         // Stop after the 4th object (which is mid-second-page given PAGE_SIZE=3).
