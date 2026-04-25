@@ -23,7 +23,6 @@ import org.identityconnectors.framework.common.exceptions.AlreadyExistsException
 import org.identityconnectors.framework.common.exceptions.InvalidAttributeValueException;
 import org.identityconnectors.framework.common.exceptions.UnknownUidException;
 import org.identityconnectors.framework.common.objects.*;
-import org.identityconnectors.framework.spi.SearchResultsHandler;
 import org.keycloak.admin.client.Keycloak;
 import org.keycloak.admin.client.resource.ClientResource;
 import org.keycloak.admin.client.resource.ClientsResource;
@@ -130,17 +129,9 @@ public class KeycloakAdminRESTClientRole implements KeycloakClient.ClientRole {
                     attrs = new HashMap();
                 }
 
-                List<Object> values = attr.getValue();
-                for (Object v : values) {
-                    String kv = v.toString();
-                    int index = kv.indexOf("=");
-                    if (index <= 0) {
-                        throw new InvalidAttributeValueException("The attribute is invalid format: " + kv);
-                    }
-                    String key = kv.substring(0, index);
-                    String value = kv.substring(index + 1);
-
-                    attrs.put(key, Arrays.asList(value.split("##")));
+                for (Object v : attr.getValue()) {
+                    Map.Entry<String, List<String>> e = parseKeyValueAttribute(v.toString());
+                    attrs.put(e.getKey(), e.getValue());
                 }
 
                 newClientRole.setAttributes(attrs);
@@ -181,37 +172,22 @@ public class KeycloakAdminRESTClientRole implements KeycloakClient.ClientRole {
                     // First, we need to remove the attributes
                     if (delta.getValuesToRemove() != null) {
                         for (Object v : delta.getValuesToRemove()) {
-                            String kv = v.toString();
-                            int index = kv.indexOf("=");
-                            if (index <= 0) {
-                                throw new InvalidAttributeValueException("The attribute is invalid format: " + kv);
-                            }
-                            String key = kv.substring(0, index);
-
+                            String key = parseKeyValueKey(v.toString());
                             if (schema.clientSchema.containsKey(key)) {
                                 LOGGER.ok("Ignore removing attributes because it's configured attribute");
                                 continue;
                             }
-
                             attrs.remove(key);
                         }
                     }
                     if (delta.getValuesToAdd() != null) {
                         for (Object v : delta.getValuesToAdd()) {
-                            String kv = v.toString();
-                            int index = kv.indexOf("=");
-                            if (index <= 0) {
-                                throw new InvalidAttributeValueException("The attribute is invalid format: " + kv);
-                            }
-                            String key = kv.substring(0, index);
-                            String value = kv.substring(index + 1);
-
-                            if (schema.clientSchema.containsKey(key)) {
+                            Map.Entry<String, List<String>> e = parseKeyValueAttribute(v.toString());
+                            if (schema.clientSchema.containsKey(e.getKey())) {
                                 LOGGER.ok("Ignore putting attributes because it's configured attribute");
                                 continue;
                             }
-
-                            attrs.put(key, Arrays.asList(value.split("##")));
+                            attrs.put(e.getKey(), e.getValue());
                         }
                     }
 
@@ -261,20 +237,15 @@ public class KeycloakAdminRESTClientRole implements KeycloakClient.ClientRole {
 
             for (RoleRepresentation cr : clientRoles) {
                 if (!handler.handle(toConnectorObject(schema, realmName, cr, attributesToGet, allowPartialAttributeValues, queryPageSize))) {
-                    signalAllResultsReturned(handler);
+                    KeycloakRESTUtils.signalAllResultsReturned(handler);
                     return;
                 }
             }
         }
 
-        signalAllResultsReturned(handler);
+        KeycloakRESTUtils.signalAllResultsReturned(handler);
     }
 
-    private void signalAllResultsReturned(ResultsHandler handler) {
-        if (handler instanceof SearchResultsHandler) {
-            ((SearchResultsHandler) handler).handleResult(new SearchResult(null, 0, true));
-        }
-    }
 
     @Override
     public void getClientRole(KeycloakSchema schema, String realmName, Uid uid, ResultsHandler handler, OperationOptions options,

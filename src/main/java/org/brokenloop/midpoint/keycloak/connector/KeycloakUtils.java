@@ -259,4 +259,54 @@ public class KeycloakUtils {
 
         return current;
     }
+
+    /**
+     * Parses a "key=value" or "key=value1##value2##..." string into a key and a
+     * multi-valued list. Used for the connector's encoding of custom Keycloak
+     * attributes (where the underlying KC representation is
+     * {@code Map<String, List<String>>} but ConnId attributes are typed flat).
+     *
+     * @throws InvalidAttributeValueException if the input has no '=' separator
+     *         or starts with one (empty key).
+     */
+    public static Map.Entry<String, List<String>> parseKeyValueAttribute(String kv) {
+        int idx = kv.indexOf('=');
+        if (idx <= 0) {
+            throw new InvalidAttributeValueException("The attribute is invalid format: " + kv);
+        }
+        String key = kv.substring(0, idx);
+        List<String> values = Arrays.asList(kv.substring(idx + 1).split("##"));
+        return new AbstractMap.SimpleImmutableEntry<>(key, values);
+    }
+
+    /**
+     * Returns just the key portion of a "key=value..." string. Used by remove
+     * paths that don't care about the value.
+     *
+     * @throws InvalidAttributeValueException if the input has no '=' separator
+     *         or starts with one (empty key).
+     */
+    public static String parseKeyValueKey(String kv) {
+        int idx = kv.indexOf('=');
+        if (idx <= 0) {
+            throw new InvalidAttributeValueException("The attribute is invalid format: " + kv);
+        }
+        return kv.substring(0, idx);
+    }
+
+    /**
+     * Parses a "key=value" string into a key and a single (raw, unsplit) value.
+     * Used for KC representations that store custom attributes as
+     * {@code Map<String, String>} (e.g. ClientRepresentation).
+     *
+     * @throws InvalidAttributeValueException if the input has no '=' separator
+     *         or starts with one (empty key).
+     */
+    public static Map.Entry<String, String> parseKeyValueRaw(String kv) {
+        int idx = kv.indexOf('=');
+        if (idx <= 0) {
+            throw new InvalidAttributeValueException("The attribute is invalid format: " + kv);
+        }
+        return new AbstractMap.SimpleImmutableEntry<>(kv.substring(0, idx), kv.substring(idx + 1));
+    }
 }

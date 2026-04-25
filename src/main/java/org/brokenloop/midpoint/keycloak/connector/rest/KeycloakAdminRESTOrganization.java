@@ -19,7 +19,6 @@ import org.identityconnectors.framework.common.exceptions.AlreadyExistsException
 import org.identityconnectors.framework.common.exceptions.InvalidAttributeValueException;
 import org.identityconnectors.framework.common.exceptions.UnknownUidException;
 import org.identityconnectors.framework.common.objects.*;
-import org.identityconnectors.framework.spi.SearchResultsHandler;
 import org.keycloak.admin.client.Keycloak;
 import org.keycloak.admin.client.resource.OrganizationResource;
 import org.keycloak.admin.client.resource.OrganizationsResource;
@@ -81,6 +80,11 @@ public class KeycloakAdminRESTOrganization implements KeycloakClient.Organizatio
         org.setEnabled(true); // default
 
         for (Attribute attr : attributes) {
+            // Uid is server-generated; members are added via the Members API after create.
+            if (attr.getName().equals(Uid.NAME) || attr.getName().equals(ATTR_MEMBERS)) {
+                continue;
+            }
+
             if (attr.getName().equals(Name.NAME)) {
                 org.setName(AttributeUtil.getAsStringValue(attr));
 
@@ -107,18 +111,11 @@ public class KeycloakAdminRESTOrganization implements KeycloakClient.Organizatio
                     attrs = new HashMap<>();
                 }
                 for (Object v : attr.getValue()) {
-                    String kv = v.toString();
-                    int idx = kv.indexOf("=");
-                    if (idx <= 0) {
-                        throw new InvalidAttributeValueException("The attribute is invalid format: " + kv);
-                    }
-                    attrs.put(kv.substring(0, idx),
-                            Arrays.asList(kv.substring(idx + 1).split("##")));
+                    Map.Entry<String, List<String>> e = parseKeyValueAttribute(v.toString());
+                    attrs.put(e.getKey(), e.getValue());
                 }
                 org.setAttributes(attrs);
 
-            } else if (attr.getName().equals(Uid.NAME) || attr.getName().equals(ATTR_MEMBERS)) {
-                // ignore on create (members are added separately)
             } else {
                 invalidSchema(attr.getName());
             }
@@ -210,23 +207,13 @@ public class KeycloakAdminRESTOrganization implements KeycloakClient.Organizatio
                     }
                     if (delta.getValuesToRemove() != null) {
                         for (Object v : delta.getValuesToRemove()) {
-                            String kv = v.toString();
-                            int idx = kv.indexOf("=");
-                            if (idx <= 0) {
-                                throw new InvalidAttributeValueException("The attribute is invalid format: " + kv);
-                            }
-                            attrs.remove(kv.substring(0, idx));
+                            attrs.remove(parseKeyValueKey(v.toString()));
                         }
                     }
                     if (delta.getValuesToAdd() != null) {
                         for (Object v : delta.getValuesToAdd()) {
-                            String kv = v.toString();
-                            int idx = kv.indexOf("=");
-                            if (idx <= 0) {
-                                throw new InvalidAttributeValueException("The attribute is invalid format: " + kv);
-                            }
-                            attrs.put(kv.substring(0, idx),
-                                    Arrays.asList(kv.substring(idx + 1).split("##")));
+                            Map.Entry<String, List<String>> e = parseKeyValueAttribute(v.toString());
+                            attrs.put(e.getKey(), e.getValue());
                         }
                     }
                     current.setAttributes(attrs);
@@ -291,19 +278,14 @@ public class KeycloakAdminRESTOrganization implements KeycloakClient.Organizatio
         List<OrganizationRepresentation> orgs = organizations(realmName).getAll();
         for (OrganizationRepresentation org : orgs) {
             if (!handler.handle(toConnectorObject(realmName, org, attributesToGet, allowPartial))) {
-                signalAllResultsReturned(handler);
+                KeycloakRESTUtils.signalAllResultsReturned(handler);
                 return;
             }
         }
 
-        signalAllResultsReturned(handler);
+        KeycloakRESTUtils.signalAllResultsReturned(handler);
     }
 
-    private void signalAllResultsReturned(ResultsHandler handler) {
-        if (handler instanceof SearchResultsHandler) {
-            ((SearchResultsHandler) handler).handleResult(new SearchResult(null, 0, true));
-        }
-    }
 
     @Override
     public void getOrganization(KeycloakSchema schema, String realmName, Uid uid, ResultsHandler handler, OperationOptions options,

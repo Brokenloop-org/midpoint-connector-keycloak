@@ -24,7 +24,6 @@ import org.identityconnectors.framework.common.exceptions.AlreadyExistsException
 import org.identityconnectors.framework.common.exceptions.InvalidAttributeValueException;
 import org.identityconnectors.framework.common.exceptions.UnknownUidException;
 import org.identityconnectors.framework.common.objects.*;
-import org.identityconnectors.framework.spi.SearchResultsHandler;
 import org.keycloak.admin.client.Keycloak;
 import org.keycloak.admin.client.resource.ClientResource;
 import org.keycloak.admin.client.resource.ClientsResource;
@@ -160,22 +159,13 @@ public class KeycloakAdminRESTClient implements KeycloakClient.Client {
                     attrs.put(attr.getName(), AttributeUtil.getStringValue(attr));
 
                 } else {
-                    List<Object> values = attr.getValue();
-                    for (Object v : values) {
-                        String kv = v.toString();
-                        int index = kv.indexOf("=");
-                        if (index <= 0) {
-                            throw new InvalidAttributeValueException("The attribute is invalid format: " + kv);
-                        }
-                        String key = kv.substring(0, index);
-                        String value = kv.substring(index + 1);
-
-                        if (schema.clientSchema.containsKey(key)) {
+                    for (Object v : attr.getValue()) {
+                        Map.Entry<String, String> e = parseKeyValueRaw(v.toString());
+                        if (schema.clientSchema.containsKey(e.getKey())) {
                             LOGGER.ok("Ignore putting attributes because it's configured attribute");
                             continue;
                         }
-
-                        attrs.put(key, value);
+                        attrs.put(e.getKey(), e.getValue());
                     }
                 }
 
@@ -280,37 +270,22 @@ public class KeycloakAdminRESTClient implements KeycloakClient.Client {
                         // First, we need to remove the attributes
                         if (delta.getValuesToRemove() != null) {
                             for (Object v : delta.getValuesToRemove()) {
-                                String kv = v.toString();
-                                int index = kv.indexOf("=");
-                                if (index <= 0) {
-                                    throw new InvalidAttributeValueException("The attribute is invalid format: " + kv);
-                                }
-                                String key = kv.substring(0, index);
-
+                                String key = parseKeyValueKey(v.toString());
                                 if (schema.clientSchema.containsKey(key)) {
                                     LOGGER.ok("Ignore removing attributes because it's configured attribute");
                                     continue;
                                 }
-
                                 attrs.remove(key);
                             }
                         }
                         if (delta.getValuesToAdd() != null) {
                             for (Object v : delta.getValuesToAdd()) {
-                                String kv = v.toString();
-                                int index = kv.indexOf("=");
-                                if (index <= 0) {
-                                    throw new InvalidAttributeValueException("The attribute is invalid format: " + kv);
-                                }
-                                String key = kv.substring(0, index);
-                                String value = kv.substring(index + 1);
-
-                                if (schema.clientSchema.containsKey(key)) {
+                                Map.Entry<String, String> e = parseKeyValueRaw(v.toString());
+                                if (schema.clientSchema.containsKey(e.getKey())) {
                                     LOGGER.ok("Ignore putting attributes because it's configured attribute");
                                     continue;
                                 }
-
-                                attrs.put(key, value);
+                                attrs.put(e.getKey(), e.getValue());
                             }
                         }
                     }
@@ -355,19 +330,14 @@ public class KeycloakAdminRESTClient implements KeycloakClient.Client {
 
         for (ClientRepresentation rep : results) {
             if (!handler.handle(toConnectorObject(schema, realmName, rep, attributesToGet, allowPartialAttributeValues, queryPageSize))) {
-                signalAllResultsReturned(handler);
+                KeycloakRESTUtils.signalAllResultsReturned(handler);
                 return;
             }
         }
 
-        signalAllResultsReturned(handler);
+        KeycloakRESTUtils.signalAllResultsReturned(handler);
     }
 
-    private void signalAllResultsReturned(ResultsHandler handler) {
-        if (handler instanceof SearchResultsHandler) {
-            ((SearchResultsHandler) handler).handleResult(new SearchResult(null, 0, true));
-        }
-    }
 
     @Override
     public void getClient(KeycloakSchema schema, String realmName, Uid uid, ResultsHandler handler, OperationOptions options,

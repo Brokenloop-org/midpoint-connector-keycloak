@@ -23,7 +23,6 @@ import org.identityconnectors.framework.common.exceptions.AlreadyExistsException
 import org.identityconnectors.framework.common.exceptions.InvalidAttributeValueException;
 import org.identityconnectors.framework.common.exceptions.UnknownUidException;
 import org.identityconnectors.framework.common.objects.*;
-import org.identityconnectors.framework.spi.SearchResultsHandler;
 import org.keycloak.admin.client.Keycloak;
 import org.keycloak.admin.client.resource.GroupResource;
 import org.keycloak.admin.client.resource.GroupsResource;
@@ -97,11 +96,13 @@ public class KeycloakAdminRESTGroup implements KeycloakClient.Group {
         GroupRepresentation newGroup = new GroupRepresentation();
 
         for (Attribute attr : attributes) {
+            // parentId is extracted up-front by createGroup, not stored on the rep.
+            if (attr.getName().equals(ATTR_PARENT_GROUP)) {
+                continue;
+            }
+
             if (attr.getName().equals(Name.NAME)) {
                 newGroup.setName(AttributeUtil.getAsStringValue(attr));
-
-            } else if (attr.getName().equals(ATTR_PARENT_GROUP)) {
-                // parentId is handled separately by createGroup; skip here.
 
             } else {
                 if (!schema.isGroupSchema(attr)) {
@@ -111,9 +112,9 @@ public class KeycloakAdminRESTGroup implements KeycloakClient.Group {
                 if (schema.isMultiValuedGroupSchema(attr)) {
                     Map<String, List<String>> attrs = newGroup.getAttributes();
                     if (attrs == null) {
-                        attrs = new HashMap();
+                        attrs = new HashMap<>();
                     }
-                    attrs.put(attr.getName(), attr.getValue().stream().map(a -> a.toString()).collect(Collectors.toList()));
+                    attrs.put(attr.getName(), attr.getValue().stream().map(Object::toString).collect(Collectors.toList()));
 
                 } else {
                     newGroup.singleAttribute(attr.getName(), AttributeUtil.getStringValue(attr));
@@ -251,7 +252,7 @@ public class KeycloakAdminRESTGroup implements KeycloakClient.Group {
 
             for (GroupRepresentation rep : results) {
                 if (!handler.handle(toConnectorObject(schema, realmName, rep, attributesToGet, allowPartialAttributeValues, queryPageSize))) {
-                    signalAllResultsReturned(handler);
+                    KeycloakRESTUtils.signalAllResultsReturned(handler);
                     return;
                 }
             }
@@ -260,18 +261,9 @@ public class KeycloakAdminRESTGroup implements KeycloakClient.Group {
             start += results.size();
         }
 
-        signalAllResultsReturned(handler);
+        KeycloakRESTUtils.signalAllResultsReturned(handler);
     }
 
-    /**
-     * Signal end-of-stream to the ConnId framework so consumers (e.g. MidPoint)
-     * can derive the exact total count and avoid phantom page counts.
-     */
-    private void signalAllResultsReturned(ResultsHandler handler) {
-        if (handler instanceof SearchResultsHandler) {
-            ((SearchResultsHandler) handler).handleResult(new SearchResult(null, 0, true));
-        }
-    }
 
     @Override
     public void getGroup(KeycloakSchema schema, String realmName, Uid uid, ResultsHandler handler, OperationOptions options,

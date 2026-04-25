@@ -322,4 +322,83 @@ class KeycloakUtilsTest {
         List<String> result = KeycloakUtils.mergeList(current, delta);
         assertSame(current, result);
     }
+
+    // --- parseKeyValueAttribute ---
+
+    @Test
+    void parseKeyValueAttribute_singleValue() {
+        Map.Entry<String, List<String>> e = KeycloakUtils.parseKeyValueAttribute("k=v");
+        assertEquals("k", e.getKey());
+        assertEquals(List.of("v"), e.getValue());
+    }
+
+    @Test
+    void parseKeyValueAttribute_multiValueSplitsOnDoubleHash() {
+        Map.Entry<String, List<String>> e = KeycloakUtils.parseKeyValueAttribute("k=a##b##c");
+        assertEquals("k", e.getKey());
+        assertEquals(List.of("a", "b", "c"), e.getValue());
+    }
+
+    @Test
+    void parseKeyValueAttribute_valueContainingEqualsKept() {
+        // Only the first '=' is the separator; the rest is value.
+        Map.Entry<String, List<String>> e = KeycloakUtils.parseKeyValueAttribute("k=v=u");
+        assertEquals("k", e.getKey());
+        assertEquals(List.of("v=u"), e.getValue());
+    }
+
+    @Test
+    void parseKeyValueAttribute_emptyValueReturnsListOfEmptyString() {
+        Map.Entry<String, List<String>> e = KeycloakUtils.parseKeyValueAttribute("k=");
+        assertEquals("k", e.getKey());
+        assertEquals(List.of(""), e.getValue());
+    }
+
+    @Test
+    void parseKeyValueAttribute_noEquals_throws() {
+        org.identityconnectors.framework.common.exceptions.InvalidAttributeValueException ex =
+                assertThrows(
+                        org.identityconnectors.framework.common.exceptions.InvalidAttributeValueException.class,
+                        () -> KeycloakUtils.parseKeyValueAttribute("invalid"));
+        assertTrue(ex.getMessage().contains("invalid"));
+    }
+
+    @Test
+    void parseKeyValueAttribute_emptyKey_throws() {
+        // "=value" -> indexOf returns 0 which we treat as invalid.
+        assertThrows(
+                org.identityconnectors.framework.common.exceptions.InvalidAttributeValueException.class,
+                () -> KeycloakUtils.parseKeyValueAttribute("=value"));
+    }
+
+    // --- parseKeyValueKey ---
+
+    @Test
+    void parseKeyValueKey_returnsKeyOnly() {
+        assertEquals("k", KeycloakUtils.parseKeyValueKey("k=anything"));
+    }
+
+    @Test
+    void parseKeyValueKey_noEquals_throws() {
+        assertThrows(
+                org.identityconnectors.framework.common.exceptions.InvalidAttributeValueException.class,
+                () -> KeycloakUtils.parseKeyValueKey("invalid"));
+    }
+
+    // --- parseKeyValueRaw ---
+
+    @Test
+    void parseKeyValueRaw_keepsValueUnsplit() {
+        // Raw variant must NOT split on ##; the whole post-= portion is the value.
+        Map.Entry<String, String> e = KeycloakUtils.parseKeyValueRaw("k=a##b");
+        assertEquals("k", e.getKey());
+        assertEquals("a##b", e.getValue());
+    }
+
+    @Test
+    void parseKeyValueRaw_noEquals_throws() {
+        assertThrows(
+                org.identityconnectors.framework.common.exceptions.InvalidAttributeValueException.class,
+                () -> KeycloakUtils.parseKeyValueRaw("invalid"));
+    }
 }

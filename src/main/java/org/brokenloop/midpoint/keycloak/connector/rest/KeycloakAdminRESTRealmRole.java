@@ -18,7 +18,6 @@ import org.identityconnectors.framework.common.exceptions.AlreadyExistsException
 import org.identityconnectors.framework.common.exceptions.InvalidAttributeValueException;
 import org.identityconnectors.framework.common.exceptions.UnknownUidException;
 import org.identityconnectors.framework.common.objects.*;
-import org.identityconnectors.framework.spi.SearchResultsHandler;
 import org.keycloak.admin.client.Keycloak;
 import org.keycloak.admin.client.resource.RealmResource;
 import org.keycloak.admin.client.resource.RolesResource;
@@ -82,6 +81,11 @@ public class KeycloakAdminRESTRealmRole implements KeycloakClient.RealmRole {
         newRole.setClientRole(false);
 
         for (Attribute attr : attributes) {
+            // Uid is server-generated; not stored on the rep.
+            if (attr.getName().equals(Uid.NAME)) {
+                continue;
+            }
+
             if (attr.getName().equals(Name.NAME)) {
                 newRole.setName(AttributeUtil.getAsStringValue(attr));
 
@@ -94,22 +98,13 @@ public class KeycloakAdminRESTRealmRole implements KeycloakClient.RealmRole {
                     attrs = new HashMap<>();
                 }
 
-                List<Object> values = attr.getValue();
-                for (Object v : values) {
-                    String kv = v.toString();
-                    int index = kv.indexOf("=");
-                    if (index <= 0) {
-                        throw new InvalidAttributeValueException("The attribute is invalid format: " + kv);
-                    }
-                    String key = kv.substring(0, index);
-                    String value = kv.substring(index + 1);
-                    attrs.put(key, Arrays.asList(value.split("##")));
+                for (Object v : attr.getValue()) {
+                    Map.Entry<String, List<String>> e = parseKeyValueAttribute(v.toString());
+                    attrs.put(e.getKey(), e.getValue());
                 }
 
                 newRole.setAttributes(attrs);
 
-            } else if (attr.getName().equals(Uid.NAME)) {
-                // ignore
             } else {
                 invalidSchema(attr.getName());
             }
@@ -138,24 +133,13 @@ public class KeycloakAdminRESTRealmRole implements KeycloakClient.RealmRole {
 
                     if (delta.getValuesToRemove() != null) {
                         for (Object v : delta.getValuesToRemove()) {
-                            String kv = v.toString();
-                            int index = kv.indexOf("=");
-                            if (index <= 0) {
-                                throw new InvalidAttributeValueException("The attribute is invalid format: " + kv);
-                            }
-                            attrs.remove(kv.substring(0, index));
+                            attrs.remove(parseKeyValueKey(v.toString()));
                         }
                     }
                     if (delta.getValuesToAdd() != null) {
                         for (Object v : delta.getValuesToAdd()) {
-                            String kv = v.toString();
-                            int index = kv.indexOf("=");
-                            if (index <= 0) {
-                                throw new InvalidAttributeValueException("The attribute is invalid format: " + kv);
-                            }
-                            String key = kv.substring(0, index);
-                            String value = kv.substring(index + 1);
-                            attrs.put(key, Arrays.asList(value.split("##")));
+                            Map.Entry<String, List<String>> e = parseKeyValueAttribute(v.toString());
+                            attrs.put(e.getKey(), e.getValue());
                         }
                     }
 
@@ -195,19 +179,14 @@ public class KeycloakAdminRESTRealmRole implements KeycloakClient.RealmRole {
 
         for (RoleRepresentation rep : roles) {
             if (!handler.handle(toConnectorObject(rep, attributesToGet, allowPartialAttributeValues))) {
-                signalAllResultsReturned(handler);
+                KeycloakRESTUtils.signalAllResultsReturned(handler);
                 return;
             }
         }
 
-        signalAllResultsReturned(handler);
+        KeycloakRESTUtils.signalAllResultsReturned(handler);
     }
 
-    private void signalAllResultsReturned(ResultsHandler handler) {
-        if (handler instanceof SearchResultsHandler) {
-            ((SearchResultsHandler) handler).handleResult(new SearchResult(null, 0, true));
-        }
-    }
 
     @Override
     public void getRealmRole(KeycloakSchema schema, String realmName, Uid uid, ResultsHandler handler, OperationOptions options,

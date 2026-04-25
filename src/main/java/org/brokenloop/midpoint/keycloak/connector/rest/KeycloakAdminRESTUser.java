@@ -25,7 +25,6 @@ import org.identityconnectors.framework.common.exceptions.AlreadyExistsException
 import org.identityconnectors.framework.common.exceptions.InvalidAttributeValueException;
 import org.identityconnectors.framework.common.exceptions.UnknownUidException;
 import org.identityconnectors.framework.common.objects.*;
-import org.identityconnectors.framework.spi.SearchResultsHandler;
 import org.keycloak.admin.client.Keycloak;
 import org.keycloak.admin.client.resource.RealmResource;
 import org.keycloak.admin.client.resource.UserResource;
@@ -384,7 +383,7 @@ public class KeycloakAdminRESTUser implements KeycloakClient.User {
 
             for (UserRepresentation rep : results) {
                 if (!handler.handle(toConnectorObject(schema, realmName, rep, attributesToGet, allowPartialAttributeValues, queryPageSize))) {
-                    signalAllResultsReturned(handler);
+                    KeycloakRESTUtils.signalAllResultsReturned(handler);
                     return;
                 }
             }
@@ -393,18 +392,9 @@ public class KeycloakAdminRESTUser implements KeycloakClient.User {
             start += results.size();
         }
 
-        signalAllResultsReturned(handler);
+        KeycloakRESTUtils.signalAllResultsReturned(handler);
     }
 
-    /**
-     * Signal end-of-stream to the ConnId framework so consumers (e.g. MidPoint)
-     * can derive the exact total count and avoid phantom page counts.
-     */
-    private void signalAllResultsReturned(ResultsHandler handler) {
-        if (handler instanceof SearchResultsHandler) {
-            ((SearchResultsHandler) handler).handleResult(new SearchResult(null, 0, true));
-        }
-    }
 
     @Override
     public void getUser(KeycloakSchema schema, String realmName, Uid uid, ResultsHandler handler, OperationOptions options,

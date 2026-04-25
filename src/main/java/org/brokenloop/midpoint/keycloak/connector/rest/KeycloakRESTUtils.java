@@ -17,6 +17,9 @@ package org.brokenloop.midpoint.keycloak.connector.rest;
 
 import org.identityconnectors.framework.common.exceptions.AlreadyExistsException;
 import org.identityconnectors.framework.common.exceptions.ConnectorException;
+import org.identityconnectors.framework.common.objects.ResultsHandler;
+import org.identityconnectors.framework.common.objects.SearchResult;
+import org.identityconnectors.framework.spi.SearchResultsHandler;
 
 import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.core.Response;
@@ -60,5 +63,16 @@ public class KeycloakRESTUtils {
 
         throw new ConnectorException(String.format("Keycloak returns unexpected error when calling \"%s\". status: %d",
                 apiName, result.getStatus()));
+    }
+
+    /**
+     * Signal end-of-stream to the ConnId framework so consumers (e.g. MidPoint)
+     * can derive the exact total count and avoid phantom page counts. No-op if
+     * the handler doesn't implement SearchResultsHandler.
+     */
+    public static void signalAllResultsReturned(ResultsHandler handler) {
+        if (handler instanceof SearchResultsHandler) {
+            ((SearchResultsHandler) handler).handleResult(new SearchResult(null, 0, true));
+        }
     }
 }
