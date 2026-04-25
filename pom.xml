@@ -10,17 +10,20 @@
         <relativePath></relativePath>
     </parent>
 
-    <groupId>jp.openstandia.connector</groupId>
+    <groupId>org.brokenloop.midpoint.keycloak.connector</groupId>
     <artifactId>connector-keycloak</artifactId>
-    <version>1.1.7-SNAPSHOT</version>
+    <version>2.0.0-SNAPSHOT</version>
     <packaging>jar</packaging>
 
-    <name>Keycloak Connector</name>
+    <name>MidPoint Keycloak Connector</name>
 
     <description>
-        Keycloak Connector.
+        ConnId connector for provisioning Keycloak resources from MidPoint.
+        Hard fork of openstandia/connector-keycloak with Keycloak 26 support,
+        realm role and Organization object classes, comprehensive test suite,
+        and Nix-based development environment.
     </description>
-    <url>https://github.com/openstandia/connector-keycloak</url>
+    <url>https://github.com/brokenloop/midpoint-connector-keycloak</url>
 
     <licenses>
         <license>
@@ -30,35 +33,22 @@
         </license>
     </licenses>
 
-    <developers>
-        <developer>
-            <id>wadahiro</id>
-            <name>Hiroyuki Wada</name>
-            <email>h2-wada@nri.co.jp</email>
-            <organization>Nomura Research Institute, Ltd.</organization>
-            <timezone>+9</timezone>
-        </developer>
-    </developers>
-
     <scm>
-        <connection>scm:git:https://github.com/openstandia/connector-keycloak.git</connection>
-        <developerConnection>scm:git:https://github.com/openstandia/connector-keycloak.git</developerConnection>
-        <url>https://github.com/openstandia/connector-keycloak</url>
+        <connection>scm:git:https://github.com/brokenloop/midpoint-connector-keycloak.git</connection>
+        <developerConnection>scm:git:https://github.com/brokenloop/midpoint-connector-keycloak.git</developerConnection>
+        <url>https://github.com/brokenloop/midpoint-connector-keycloak</url>
     </scm>
 
     <distributionManagement>
-        <snapshotRepository>
-            <id>ossrh</id>
-            <url>https://oss.sonatype.org/content/repositories/snapshots</url>
-        </snapshotRepository>
         <repository>
-            <id>ossrh</id>
-            <url>https://oss.sonatype.org/service/local/staging/deploy/maven2/</url>
+            <id>github</id>
+            <name>GitHub Packages</name>
+            <url>https://maven.pkg.github.com/brokenloop/midpoint-connector-keycloak</url>
         </repository>
     </distributionManagement>
 
     <properties>
-        <connectorPackage>jp.openstandia.connector.keycloak</connectorPackage>
+        <connectorPackage>org.brokenloop.midpoint.keycloak.connector</connectorPackage>
         <connectorClass>KeycloakConnector</connectorClass>
         <maven.compiler.source>17</maven.compiler.source>
         <maven.compiler.target>17</maven.compiler.target>
@@ -150,18 +140,6 @@
                 </executions>
             </plugin>
             <plugin>
-                <groupId>org.sonatype.plugins</groupId>
-                <artifactId>nexus-staging-maven-plugin</artifactId>
-                <version>1.6.8</version>
-                <extensions>true</extensions>
-                <configuration>
-                    <serverId>ossrh</serverId>
-                    <nexusUrl>https://oss.sonatype.org/</nexusUrl>
-                    <autoReleaseAfterClose>true</autoReleaseAfterClose>
-                    <stagingProgressTimeoutMinutes>20</stagingProgressTimeoutMinutes>
-                </configuration>
-            </plugin>
-            <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-source-plugin</artifactId>
                 <version>3.2.0</version>
@@ -188,26 +166,6 @@
                         <id>attach-javadocs</id>
                         <goals>
                             <goal>jar</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-gpg-plugin</artifactId>
-                <version>1.6</version>
-                <configuration>
-                    <gpgArguments>
-                        <arg>--pinentry-mode</arg>
-                        <arg>loopback</arg>
-                    </gpgArguments>
-                </configuration>
-                <executions>
-                    <execution>
-                        <id>sign-artifacts</id>
-                        <phase>verify</phase>
-                        <goals>
-                            <goal>sign</goal>
                         </goals>
                     </execution>
                 </executions>

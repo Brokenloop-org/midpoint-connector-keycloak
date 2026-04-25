@@ -1,5 +1,5 @@
 {
-  description = "connector-keycloak development environment";
+  description = "MidPoint Keycloak Connector development environment";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -87,7 +87,7 @@
 
           shellHook = ''
             export JAVA_HOME="${pkgs.jdk17}"
-            echo "connector-keycloak dev shell"
+            echo "midpoint-connector-keycloak dev shell"
             echo "  Java:     $(java -version 2>&1 | head -1)"
             echo "  Maven:    $(mvn -version 2>&1 | head -1)"
             echo "  Keycloak: ${pkgs.keycloak.version}"
