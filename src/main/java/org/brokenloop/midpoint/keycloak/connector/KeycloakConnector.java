@@ -124,10 +124,12 @@ public class KeycloakConnector implements PoolableConnector, CreateOp, UpdateDel
 
         } else if (objectClass.equals(ORGANIZATION_OBJECT_CLASS)) {
             if (!schema.organizationsAvailable) {
+                LOG.error("Organization object class requested but unavailable on target realm '{0}'. "
+                        + "Enable the 'organization' server feature and set organizationsEnabled=true on the realm.",
+                        configuration.getTargetRealmName());
                 throw new InvalidAttributeValueException(
-                        "Organization object class is not available: enable the 'organization' " +
-                        "feature on the Keycloak server and set organizationsEnabled=true on realm '" +
-                        configuration.getTargetRealmName() + "'");
+                        "Organization object class is not available on the target Keycloak realm: "
+                        + "enable the 'organization' server feature and set organizationsEnabled=true on the realm.");
             }
             return new KeycloakOrganizationHandler(instanceName, configuration, client, schema);
 

@@ -1,5 +1,6 @@
 package org.brokenloop.midpoint.keycloak.connector;
 
+import org.identityconnectors.common.security.GuardedString;
 import org.identityconnectors.framework.common.exceptions.UnknownUidException;
 import org.identityconnectors.framework.common.objects.*;
 import org.junit.jupiter.api.*;
@@ -7,6 +8,7 @@ import org.junit.jupiter.api.*;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.brokenloop.midpoint.keycloak.connector.KeycloakClientHandler.*;
 import static org.junit.jupiter.api.Assertions.*;
@@ -111,6 +113,30 @@ class KeycloakClientIT extends AbstractKeycloakIT {
                 AttributeUtil.getSingleValue(found.getAttributeByName(ATTR_DIRECT_ACCESS_GRANTS_ENABLED)));
         assertEquals(Boolean.FALSE,
                 AttributeUtil.getSingleValue(found.getAttributeByName(ATTR_SERVICE_ACCOUNT_ENABLED)));
+    }
+
+    @Test
+    void clientSecret_returnedAsGuardedString_notPlainString() {
+        // Confidential client (publicClient=false) gets a server-generated secret.
+        Set<Attribute> attrs = clientAttrs("secret-client");
+        attrs.add(AttributeBuilder.build(ATTR_PUBLIC_CLIENT, false));
+        attrs.add(AttributeBuilder.build(ATTR_SERVICE_ACCOUNT_ENABLED, true));
+        Uid uid = connector.create(CLIENT_OBJECT_CLASS, attrs, null);
+
+        ConnectorObject found = searchByUidWithAttrs(connector, CLIENT_OBJECT_CLASS, uid, ATTR_SECRET);
+        Attribute secretAttr = found.getAttributeByName(ATTR_SECRET);
+        assertNotNull(secretAttr);
+        Object value = AttributeUtil.getSingleValue(secretAttr);
+        assertNotNull(value, "Confidential client must have a generated secret");
+        assertInstanceOf(GuardedString.class, value,
+                "Client secret must be returned as GuardedString, not plain String. Got: "
+                        + value.getClass().getName());
+
+        // Sanity: the GuardedString unwraps to a non-empty value
+        AtomicReference<String> unwrapped = new AtomicReference<>();
+        ((GuardedString) value).access(chars -> unwrapped.set(new String(chars)));
+        assertNotNull(unwrapped.get());
+        assertFalse(unwrapped.get().isEmpty());
     }
 
     @Test

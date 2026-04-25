@@ -98,4 +98,19 @@ class KeycloakConfigurationTest {
         c.setGrpcPort(9999);
         assertEquals(9999, c.getGrpcPort());
     }
+
+    // --- HTTP proxy scheme ---
+
+    @Test
+    void getHttpProxyScheme_default_isHttp() {
+        KeycloakConfiguration c = config();
+        assertEquals("http", c.getHttpProxyScheme());
+    }
+
+    @Test
+    void setHttpProxyScheme_overrides() {
+        KeycloakConfiguration c = config();
+        c.setHttpProxyScheme("https");
+        assertEquals("https", c.getHttpProxyScheme());
+    }
 }

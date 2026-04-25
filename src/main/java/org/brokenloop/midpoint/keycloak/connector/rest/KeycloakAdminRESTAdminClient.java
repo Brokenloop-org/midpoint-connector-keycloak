@@ -30,6 +30,9 @@ import org.keycloak.representations.info.ServerInfoRepresentation;
 
 import jakarta.ws.rs.ProcessingException;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+
 import static org.brokenloop.midpoint.keycloak.connector.KeycloakUtils.getRootCause;
 
 /**
@@ -59,18 +62,28 @@ public class KeycloakAdminRESTAdminClient implements KeycloakClient {
         // HTTP proxy configuration
         if (configuration.getHttpProxyHost() != null && configuration.getHttpProxyPort() != 0) {
             final String httpProxyHost = configuration.getHttpProxyHost();
+            final String httpProxyScheme = configuration.getHttpProxyScheme();
 
             if (StringUtil.isNotBlank(configuration.getHttpProxyUser()) && configuration.getHttpProxyPassword() != null) {
+                // Note: RESTEasy / Apache HttpClient does not parse userinfo out of the
+                // proxy host string for authentication. Embedding "user:pass@host" here
+                // is a best-effort interpolation; URL-encode the credentials so any
+                // special characters (e.g. ':' '@' '#' '?') don't corrupt the host
+                // string. For reliable authenticated proxy support, configure proxy
+                // auth at the JVM level instead.
                 configuration.getHttpProxyPassword().access(s -> {
+                    String encodedUser = URLEncoder.encode(
+                            configuration.getHttpProxyUser(), StandardCharsets.UTF_8);
+                    String encodedPass = URLEncoder.encode(
+                            String.valueOf(s), StandardCharsets.UTF_8);
                     String httpProxyHostWithAuth = String.format("%s:%s@%s",
-                            configuration.getHttpProxyUser(),
-                            String.valueOf(s),
-                            httpProxyHost);
-
-                    resteasyClientBuilder.defaultProxy(httpProxyHostWithAuth, configuration.getHttpProxyPort(), "http");
+                            encodedUser, encodedPass, httpProxyHost);
+                    resteasyClientBuilder.defaultProxy(httpProxyHostWithAuth,
+                            configuration.getHttpProxyPort(), httpProxyScheme);
                 });
             } else {
-                resteasyClientBuilder.defaultProxy(httpProxyHost, configuration.getHttpProxyPort(), "http");
+                resteasyClientBuilder.defaultProxy(httpProxyHost,
+                        configuration.getHttpProxyPort(), httpProxyScheme);
             }
         }
 

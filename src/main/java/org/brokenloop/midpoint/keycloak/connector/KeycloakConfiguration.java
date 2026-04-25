@@ -48,6 +48,7 @@ public class KeycloakConfiguration extends AbstractConfiguration {
     private int httpProxyPort;
     private String httpProxyUser;
     private GuardedString httpProxyPassword;
+    private String httpProxyScheme = "http";
 
     @ConfigurationProperty(
             order = 1,
@@ -321,6 +322,21 @@ public class KeycloakConfiguration extends AbstractConfiguration {
 
     public void setHttpProxyPassword(GuardedString httpProxyPassword) {
         this.httpProxyPassword = httpProxyPassword;
+    }
+
+    @ConfigurationProperty(
+            order = 20,
+            displayMessageKey = "HTTP Proxy Scheme",
+            helpMessageKey = "Scheme used to connect to the HTTP proxy itself (http or https). " +
+                    "Default is http.",
+            required = false,
+            confidential = false)
+    public String getHttpProxyScheme() {
+        return httpProxyScheme;
+    }
+
+    public void setHttpProxyScheme(String httpProxyScheme) {
+        this.httpProxyScheme = httpProxyScheme;
     }
 
     @Override
