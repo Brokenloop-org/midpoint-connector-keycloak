@@ -92,6 +92,15 @@ abstract class AbstractKeycloakIT {
         return connector;
     }
 
+    static KeycloakConnector newConnectorWithPageSize(String realmName, int pageSize) {
+        KeycloakConfiguration cfg = buildConfiguration(realmName);
+        cfg.setQueryPageSize(pageSize);
+        KeycloakConnector connector = new KeycloakConnector();
+        connector.setInstanceName("test");
+        connector.init(cfg);
+        return connector;
+    }
+
     // --- Search helpers ---
 
     static List<ConnectorObject> searchAll(KeycloakConnector connector, ObjectClass objectClass) {
