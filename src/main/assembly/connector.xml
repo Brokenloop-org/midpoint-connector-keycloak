@@ -42,7 +42,7 @@
             <excludes>
                 <exclude>net.tirasa.connid:connector-framework</exclude>
                 <exclude>net.tirasa.connid:connector-framework-internal</exclude>
-                <exclude>jp.openstandia.connector:keycloak</exclude>
+                <exclude>org.brokenloop.midpoint.keycloak.connector:connector-keycloak</exclude>
             </excludes>
         </dependencySet>
     </dependencySets>
