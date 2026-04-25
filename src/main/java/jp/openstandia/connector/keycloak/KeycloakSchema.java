@@ -45,6 +45,7 @@ public class KeycloakSchema {
     public final Map<String, AttributeInfo> clientRoleSchema;
     public final Map<String, AttributeInfo> realmRoleSchema;
     public final Map<String, AttributeInfo> organizationSchema;
+    public final boolean organizationsAvailable;
 
     public KeycloakSchema(KeycloakConfiguration configuration, KeycloakClient client) {
         this.configuration = configuration;
@@ -67,8 +68,16 @@ public class KeycloakSchema {
         ObjectClassInfo realmRoleSchemaInfo = KeycloakRealmRoleHandler.getSchema(new String[]{});
         schemaBuilder.defineObjectClass(realmRoleSchemaInfo);
 
+        // Only expose the Organization object class if the server-level feature
+        // is enabled and the target realm has organizationsEnabled=true.
+        // Otherwise org operations would fail with cryptic 404s.
+        this.organizationsAvailable = client.isFeatureEnabled("organization")
+                && client.isRealmOrganizationsEnabled(configuration.getTargetRealmName());
+
         ObjectClassInfo organizationSchemaInfo = KeycloakOrganizationHandler.getSchema(new String[]{});
-        schemaBuilder.defineObjectClass(organizationSchemaInfo);
+        if (organizationsAvailable) {
+            schemaBuilder.defineObjectClass(organizationSchemaInfo);
+        }
 
         schemaBuilder.defineOperationOption(OperationOptionInfoBuilder.buildAttributesToGet(), SearchOp.class);
         schemaBuilder.defineOperationOption(OperationOptionInfoBuilder.buildReturnDefaultAttributes(), SearchOp.class);

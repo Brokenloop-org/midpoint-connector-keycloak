@@ -139,6 +139,28 @@ public class KeycloakAdminRESTAdminClient implements KeycloakClient {
     }
 
     @Override
+    public boolean isFeatureEnabled(String featureName) {
+        ServerInfoRepresentation info = adminClient.serverInfo().getInfo();
+        if (info.getFeatures() == null) {
+            return false;
+        }
+        return info.getFeatures().stream()
+                .anyMatch(f -> featureName.equalsIgnoreCase(f.getName()) && f.isEnabled());
+    }
+
+    @Override
+    public boolean isRealmOrganizationsEnabled(String realmName) {
+        try {
+            Boolean enabled = adminClient.realm(realmName).toRepresentation().isOrganizationsEnabled();
+            return Boolean.TRUE.equals(enabled);
+        } catch (Exception e) {
+            LOGGER.warn("[{0}] Failed to check organizationsEnabled for realm {1}: {2}",
+                    instanceName, realmName, e.getMessage());
+            return false;
+        }
+    }
+
+    @Override
     public User user() {
         return user;
     }

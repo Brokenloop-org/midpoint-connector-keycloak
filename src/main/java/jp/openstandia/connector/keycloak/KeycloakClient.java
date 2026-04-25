@@ -31,6 +31,17 @@ public interface KeycloakClient {
 
     String getVersion();
 
+    /**
+     * Returns true if the named server-level feature is enabled (e.g. "organization").
+     */
+    boolean isFeatureEnabled(String featureName);
+
+    /**
+     * Returns true if the target realm has organizations enabled.
+     * Requires the server-level "organization" feature to also be enabled.
+     */
+    boolean isRealmOrganizationsEnabled(String realmName);
+
     User user();
 
     Group group();
