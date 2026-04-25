@@ -43,6 +43,7 @@ public class KeycloakSchema {
     public final Map<String, AttributeInfo> groupSchema;
     public final Map<String, AttributeInfo> clientSchema;
     public final Map<String, AttributeInfo> clientRoleSchema;
+    public final Map<String, AttributeInfo> realmRoleSchema;
 
     public KeycloakSchema(KeycloakConfiguration configuration, KeycloakClient client) {
         this.configuration = configuration;
@@ -61,6 +62,9 @@ public class KeycloakSchema {
 
         ObjectClassInfo clientRoleSchemaInfo = KeycloakClientRoleHandler.getSchema(new String[]{});
         schemaBuilder.defineObjectClass(clientRoleSchemaInfo);
+
+        ObjectClassInfo realmRoleSchemaInfo = KeycloakRealmRoleHandler.getSchema(new String[]{});
+        schemaBuilder.defineObjectClass(realmRoleSchemaInfo);
 
         schemaBuilder.defineOperationOption(OperationOptionInfoBuilder.buildAttributesToGet(), SearchOp.class);
         schemaBuilder.defineOperationOption(OperationOptionInfoBuilder.buildReturnDefaultAttributes(), SearchOp.class);
@@ -87,10 +91,16 @@ public class KeycloakSchema {
             clientRoleSchemaMap.put(info.getName(), info);
         }
 
+        Map<String, AttributeInfo> realmRoleSchemaMap = new HashMap<>();
+        for (AttributeInfo info : realmRoleSchemaInfo.getAttributeInfo()) {
+            realmRoleSchemaMap.put(info.getName(), info);
+        }
+
         this.userSchema = Collections.unmodifiableMap(userSchemaMap);
         this.groupSchema = Collections.unmodifiableMap(groupSchemaMap);
         this.clientSchema = Collections.unmodifiableMap(clientSchemaMap);
         this.clientRoleSchema = Collections.unmodifiableMap(clientRoleSchemaMap);
+        this.realmRoleSchema = Collections.unmodifiableMap(realmRoleSchemaMap);
 
         this.version = client.getVersion();
 
