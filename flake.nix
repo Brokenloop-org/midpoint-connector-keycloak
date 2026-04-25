@@ -33,7 +33,7 @@
           export KC_BOOTSTRAP_ADMIN_PASSWORD=admin
 
           echo "Starting Keycloak (KC_HOME_DIR=$KC_WORK)..."
-          ${pkgs.keycloak}/bin/kc.sh start --http-enabled=true --hostname-strict=false --http-port=8090 &
+          ${pkgs.keycloak}/bin/kc.sh start --http-enabled=true --hostname-strict=false --http-port=8090 --features=organization &
           KC_PID=$!
           echo "$KC_PID" > "$KC_WORK/kc.pid"
           echo "$KC_WORK" > /tmp/kc-integration-test-home

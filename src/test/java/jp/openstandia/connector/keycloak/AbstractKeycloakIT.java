@@ -35,6 +35,10 @@ abstract class AbstractKeycloakIT {
     }
 
     protected static String setupRealm(String realmName) {
+        return setupRealm(realmName, false);
+    }
+
+    protected static String setupRealm(String realmName, boolean organizationsEnabled) {
         try (Keycloak admin = adminClient()) {
             try {
                 admin.realm(realmName).remove();
@@ -43,6 +47,9 @@ abstract class AbstractKeycloakIT {
             RealmRepresentation realm = new RealmRepresentation();
             realm.setRealm(realmName);
             realm.setEnabled(true);
+            if (organizationsEnabled) {
+                realm.setOrganizationsEnabled(true);
+            }
             admin.realms().create(realm);
         }
         return realmName;
