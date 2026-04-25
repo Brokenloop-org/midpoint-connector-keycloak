@@ -21,9 +21,16 @@
           export PATH="${kcPath}:$PATH"
           export JAVA_HOME="${pkgs.jdk17}"
 
-          # Create a writable KC home (Quarkus start-dev writes to lib/ and conf/)
+          # Create a fully writable KC home. The bin/ scripts resolve the
+          # classpath JARs relative to themselves via abs_path, so the kc.sh
+          # binary must also live in the writable copy -- otherwise the
+          # "build" command tries to write into the read-only Nix store JAR.
           KC_WORK="$(mktemp -d)"
-          cp -r ${pkgs.keycloak}/{lib,conf,providers,themes,version.txt} "$KC_WORK/"
+          cp -RL ${pkgs.keycloak}/lib ${pkgs.keycloak}/conf ${pkgs.keycloak}/providers \
+                 ${pkgs.keycloak}/themes ${pkgs.keycloak}/version.txt "$KC_WORK/"
+          # Copy the wrapped shell script (the binary wrapper hardcodes Nix paths)
+          mkdir -p "$KC_WORK/bin"
+          cp -L ${pkgs.keycloak}/bin/.kc.sh-wrapped "$KC_WORK/bin/kc.sh"
           chmod -R u+w "$KC_WORK"
           mkdir -p "$KC_WORK/data"
 
@@ -32,8 +39,13 @@
           export KC_BOOTSTRAP_ADMIN_USERNAME=admin
           export KC_BOOTSTRAP_ADMIN_PASSWORD=admin
 
+          # Build the runner with the organization feature baked in.
+          # Running from the writable copy means abs_path resolves to writable JARs.
+          echo "Building Keycloak runner with organization feature..."
+          "$KC_WORK/bin/kc.sh" build --features=organization
+
           echo "Starting Keycloak (KC_HOME_DIR=$KC_WORK)..."
-          ${pkgs.keycloak}/bin/kc.sh start --http-enabled=true --hostname-strict=false --http-port=8090 --features=organization &
+          "$KC_WORK/bin/kc.sh" start --http-enabled=true --hostname-strict=false --http-port=8090 --optimized &
           KC_PID=$!
           echo "$KC_PID" > "$KC_WORK/kc.pid"
           echo "$KC_WORK" > /tmp/kc-integration-test-home
