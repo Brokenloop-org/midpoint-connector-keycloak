@@ -263,7 +263,7 @@ public class KeycloakConfiguration extends AbstractConfiguration {
         return grpcPort;
     }
 
-    public void setGrpcPort(int grpcHost) {
+    public void setGrpcPort(int grpcPort) {
         this.grpcPort = grpcPort;
     }
 
@@ -325,8 +325,12 @@ public class KeycloakConfiguration extends AbstractConfiguration {
 
     @Override
     public void validate() {
-        if (StringUtil.isBlank(getUsername()) || getPassword() == null && getClientSecret() == null) {
-            throw new ConfigurationException("Invalid client credential: need to setup username/password or client secret.");
+        // Either username+password or clientSecret (with clientId) is required.
+        boolean hasUserPass = StringUtil.isNotBlank(getUsername()) && getPassword() != null;
+        boolean hasClientSecret = getClientSecret() != null;
+        if (!hasUserPass && !hasClientSecret) {
+            throw new ConfigurationException(
+                    "Invalid client credential: need to setup username/password or client secret.");
         }
     }
 }

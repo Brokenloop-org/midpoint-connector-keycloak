@@ -43,22 +43,14 @@ class KeycloakConfigurationTest {
     }
 
     @Test
-    void validate_blankUsername_withClientSecret_throws_operatorPrecedenceBug() {
-        // BUG: The validate() logic on line 328 is:
-        //   if (isBlank(username) || password == null && clientSecret == null)
-        // Due to operator precedence (|| binds looser than &&), this reads as:
-        //   isBlank(username) || (password == null && clientSecret == null)
-        // So blank username ALWAYS throws, even when clientSecret is set.
-        // This prevents client_credentials-only mode (no username) from working.
-        //
-        // FIX: Should likely be:
-        //   if ((isBlank(username) || password == null) && clientSecret == null)
+    void validate_clientSecretOnly_succeeds() {
+        // client_credentials grant doesn't require a username; clientSecret alone
+        // (with clientId set in config()) must be enough to validate.
         KeycloakConfiguration c = config();
         c.setUsername(null);
         c.setClientSecret(new GuardedString("secret".toCharArray()));
 
-        // Current buggy behavior: throws even though clientSecret is set
-        assertThrows(ConfigurationException.class, c::validate);
+        assertDoesNotThrow(c::validate);
     }
 
     @Test
@@ -98,21 +90,12 @@ class KeycloakConfigurationTest {
         assertEquals(100, c.getQueryPageSize());
     }
 
-    // --- setGrpcPort bug ---
+    // --- setGrpcPort ---
 
     @Test
-    void setGrpcPort_doesNotSetValue_documentsBug() {
-        // BUG: KeycloakConfiguration.setGrpcPort() on line 266-267:
-        //   public void setGrpcPort(int grpcHost) {
-        //       this.grpcPort = grpcPort;
-        //   }
-        // The parameter is named "grpcHost" (wrong), so "grpcPort" in the body
-        // refers to the field itself (self-assignment). The method is a no-op.
-        //
-        // FIX: Rename parameter to "grpcPort" and use "this.grpcPort = grpcPort;"
+    void setGrpcPort_setsValue() {
         KeycloakConfiguration c = config();
         c.setGrpcPort(9999);
-        // Current buggy behavior: value is NOT set, remains 0
-        assertEquals(0, c.getGrpcPort());
+        assertEquals(9999, c.getGrpcPort());
     }
 }

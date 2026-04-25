@@ -42,7 +42,6 @@ public class KeycloakAdminRESTAdminClient implements KeycloakClient {
     private static final Log LOGGER = Log.getLog(KeycloakAdminRESTAdminClient.class);
 
     private final String instanceName;
-    private final KeycloakConfiguration cofiguration;
     private final KeycloakAdminRESTUser user;
     private final KeycloakAdminRESTGroup group;
     private final KeycloakAdminRESTClient client;
@@ -53,7 +52,6 @@ public class KeycloakAdminRESTAdminClient implements KeycloakClient {
 
     public KeycloakAdminRESTAdminClient(String instanceName, KeycloakConfiguration configuration) {
         this.instanceName = instanceName;
-        this.cofiguration = configuration;
 
         ResteasyClientBuilder resteasyClientBuilder = new ResteasyClientBuilderImpl();
         resteasyClientBuilder.connectionPoolSize(20);
@@ -118,7 +116,7 @@ public class KeycloakAdminRESTAdminClient implements KeycloakClient {
     public void test(String realmName) {
         try {
             Boolean enabled = adminClient.realm(realmName).toRepresentation().isEnabled();
-            if (Boolean.TRUE != enabled) {
+            if (!Boolean.TRUE.equals(enabled)) {
                 throw new ConnectorException("The keycloak realm isn't active.");
             }
         } catch (ProcessingException e) {
