@@ -19,6 +19,7 @@ import org.identityconnectors.framework.common.exceptions.AlreadyExistsException
 import org.identityconnectors.framework.common.exceptions.InvalidAttributeValueException;
 import org.identityconnectors.framework.common.exceptions.UnknownUidException;
 import org.identityconnectors.framework.common.objects.*;
+import org.identityconnectors.framework.spi.SearchResultsHandler;
 import org.keycloak.admin.client.Keycloak;
 import org.keycloak.admin.client.resource.OrganizationResource;
 import org.keycloak.admin.client.resource.OrganizationsResource;
@@ -289,7 +290,18 @@ public class KeycloakAdminRESTOrganization implements KeycloakClient.Organizatio
 
         List<OrganizationRepresentation> orgs = organizations(realmName).getAll();
         for (OrganizationRepresentation org : orgs) {
-            handler.handle(toConnectorObject(realmName, org, attributesToGet, allowPartial));
+            if (!handler.handle(toConnectorObject(realmName, org, attributesToGet, allowPartial))) {
+                signalAllResultsReturned(handler);
+                return;
+            }
+        }
+
+        signalAllResultsReturned(handler);
+    }
+
+    private void signalAllResultsReturned(ResultsHandler handler) {
+        if (handler instanceof SearchResultsHandler) {
+            ((SearchResultsHandler) handler).handleResult(new SearchResult(null, 0, true));
         }
     }
 

@@ -23,6 +23,7 @@ import org.identityconnectors.framework.common.exceptions.AlreadyExistsException
 import org.identityconnectors.framework.common.exceptions.InvalidAttributeValueException;
 import org.identityconnectors.framework.common.exceptions.UnknownUidException;
 import org.identityconnectors.framework.common.objects.*;
+import org.identityconnectors.framework.spi.SearchResultsHandler;
 import org.keycloak.admin.client.Keycloak;
 import org.keycloak.admin.client.resource.ClientResource;
 import org.keycloak.admin.client.resource.ClientsResource;
@@ -253,15 +254,26 @@ public class KeycloakAdminRESTClientRole implements KeycloakClient.ClientRole {
         // TODO paging
         List<ClientRepresentation> allClients = clientsResource.findAll();
 
-        allClients.stream().forEach(c -> {
+        for (ClientRepresentation c : allClients) {
             RolesResource rolesResource = clientsResource.get(c.getId()).roles();
             // TODO paging
             List<RoleRepresentation> clientRoles = rolesResource.list();
 
-            clientRoles.stream().forEach(cr -> {
-                handler.handle(toConnectorObject(schema, realmName, cr, attributesToGet, allowPartialAttributeValues, queryPageSize));
-            });
-        });
+            for (RoleRepresentation cr : clientRoles) {
+                if (!handler.handle(toConnectorObject(schema, realmName, cr, attributesToGet, allowPartialAttributeValues, queryPageSize))) {
+                    signalAllResultsReturned(handler);
+                    return;
+                }
+            }
+        }
+
+        signalAllResultsReturned(handler);
+    }
+
+    private void signalAllResultsReturned(ResultsHandler handler) {
+        if (handler instanceof SearchResultsHandler) {
+            ((SearchResultsHandler) handler).handleResult(new SearchResult(null, 0, true));
+        }
     }
 
     @Override

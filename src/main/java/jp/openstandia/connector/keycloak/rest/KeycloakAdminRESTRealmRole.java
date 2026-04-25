@@ -18,6 +18,7 @@ import org.identityconnectors.framework.common.exceptions.AlreadyExistsException
 import org.identityconnectors.framework.common.exceptions.InvalidAttributeValueException;
 import org.identityconnectors.framework.common.exceptions.UnknownUidException;
 import org.identityconnectors.framework.common.objects.*;
+import org.identityconnectors.framework.spi.SearchResultsHandler;
 import org.keycloak.admin.client.Keycloak;
 import org.keycloak.admin.client.resource.RealmResource;
 import org.keycloak.admin.client.resource.RolesResource;
@@ -193,7 +194,18 @@ public class KeycloakAdminRESTRealmRole implements KeycloakClient.RealmRole {
         List<RoleRepresentation> roles = roles(realmName).list();
 
         for (RoleRepresentation rep : roles) {
-            handler.handle(toConnectorObject(rep, attributesToGet, allowPartialAttributeValues));
+            if (!handler.handle(toConnectorObject(rep, attributesToGet, allowPartialAttributeValues))) {
+                signalAllResultsReturned(handler);
+                return;
+            }
+        }
+
+        signalAllResultsReturned(handler);
+    }
+
+    private void signalAllResultsReturned(ResultsHandler handler) {
+        if (handler instanceof SearchResultsHandler) {
+            ((SearchResultsHandler) handler).handleResult(new SearchResult(null, 0, true));
         }
     }
 
