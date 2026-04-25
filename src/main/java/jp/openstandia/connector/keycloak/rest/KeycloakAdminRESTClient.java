@@ -88,6 +88,9 @@ public class KeycloakAdminRESTClient implements KeycloakClient.Client {
             } else if (attr.getName().equals(ENABLE_NAME)) {
                 newClient.setEnabled(AttributeUtil.getBooleanValue(attr));
 
+            } else if (attr.getName().equals(ATTR_TYPE)) {
+                newClient.setType(AttributeUtil.getStringValue(attr));
+
             } else if (attr.getName().equals(ATTR_PROTOCOL)) {
                 newClient.setProtocol(AttributeUtil.getStringValue(attr));
 
@@ -201,6 +204,9 @@ public class KeycloakAdminRESTClient implements KeycloakClient.Client {
 
                 } else if (delta.getName().equals(ENABLE_NAME)) {
                     current.setEnabled(AttributeDeltaUtil.getBooleanValue(delta));
+
+                } else if (delta.getName().equals(ATTR_TYPE)) {
+                    current.setType(AttributeDeltaUtil.getStringValue(delta));
 
                 } else if (delta.getName().equals(ATTR_PROTOCOL)) {
                     current.setProtocol(AttributeDeltaUtil.getStringValue(delta));
@@ -408,6 +414,9 @@ public class KeycloakAdminRESTClient implements KeycloakClient.Client {
 
         if (shouldReturn(attributesToGet, ENABLE_NAME)) {
             builder.addAttribute(AttributeBuilder.buildEnabled(rep.isEnabled()));
+        }
+        if (shouldReturn(attributesToGet, ATTR_TYPE)) {
+            builder.addAttribute(ATTR_TYPE, rep.getType());
         }
         if (shouldReturn(attributesToGet, ATTR_PROTOCOL)) {
             builder.addAttribute(ATTR_PROTOCOL, rep.getProtocol());

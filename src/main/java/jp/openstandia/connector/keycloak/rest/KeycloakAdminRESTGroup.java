@@ -360,25 +360,11 @@ public class KeycloakAdminRESTGroup implements KeycloakClient.Group {
                 LOGGER.ok("[{0}] Suppress fetching parent group because returned by default is true", instanceName);
 
             } else if (shouldReturn(attributesToGet, ATTR_PARENT_GROUP)) {
-                // Fetch groups
-                LOGGER.ok("[{0}] Fetching parent group because attributes to get is requested", instanceName);
-
-                // Examples of the path value:
-                // root group "foo" => /foo
-                // sub group "bar" => /foo/bar
-                String path = rep.getPath();
-                String[] pathList = path.split("/");
-
-                String parentGroupName = null;
-                if (pathList.length > 2) {
-                    parentGroupName = pathList[pathList.length - 2];
-                }
-
-                if (parentGroupName != null) {
-                    String parentGroupId = findParentGroupByName(realmName, parentGroupName, rep.getId(), queryPageSize);
-                    if (parentGroupId != null) {
-                        builder.addAttribute(ATTR_PARENT_GROUP, parentGroupId);
-                    }
+                // Use parentId field directly (available since KC 24)
+                // instead of parsing the path and searching for the parent group
+                String parentId = rep.getParentId();
+                if (parentId != null) {
+                    builder.addAttribute(ATTR_PARENT_GROUP, parentId);
                 }
             }
         }
@@ -386,44 +372,4 @@ public class KeycloakAdminRESTGroup implements KeycloakClient.Group {
         return builder.build();
     }
 
-    private String findParentGroupByName(String realmName, String parentGroupName, String groupId, int queryPageSize) {
-        GroupsResource groups = groups(realmName);
-
-        Map<String, Long> countMap = groups.count(parentGroupName);
-        Long count = countMap.get("count");
-
-        int start = 0;
-        int total = 0;
-
-        while (total < count) {
-            int end = start + queryPageSize;
-
-            List<GroupRepresentation> results = groups.groups(parentGroupName, start, end, true);
-
-            if (results.size() == 0) {
-                break;
-            }
-
-            for (GroupRepresentation rep : results) {
-                if (rep.getName() != null && rep.getName().equalsIgnoreCase(parentGroupName)) {
-                    List<GroupRepresentation> subGroups = rep.getSubGroups();
-                    if (subGroups != null) {
-                        Optional<GroupRepresentation> sub = subGroups.stream().filter(g -> g.getId().equalsIgnoreCase(groupId)).findFirst();
-                        if (sub.isPresent()) {
-                            // Found
-                            return rep.getId();
-                        }
-                    }
-                }
-            }
-
-            total += results.size();
-            start = end + 1;
-        }
-
-        // NotFound
-        LOGGER.warn("[{0}] Not found parent group \"{1}\" for \"{2}\" ", instanceName, parentGroupName, groupId);
-
-        return null;
-    }
 }

@@ -65,6 +65,7 @@ public class KeycloakClientHandler extends AbstractKeycloakHandler {
 
     // saml
 
+    public static final String ATTR_TYPE = "type";
     public static final String ATTR_ATTRIBUTES = "attributes";
 
     public KeycloakClientHandler(String instanceName, KeycloakConfiguration configuration, KeycloakClient client,
@@ -161,6 +162,11 @@ public class KeycloakClientHandler extends AbstractKeycloakHandler {
         builder.addAttributeInfo(AttributeInfoBuilder.define(ATTR_AUTHORIZATION_SERVICES_ENABLED)
                 .setRequired(false)
                 .setType(Boolean.class)
+                .build());
+
+        // Client type (added in KC 25)
+        builder.addAttributeInfo(AttributeInfoBuilder.define(ATTR_TYPE)
+                .setRequired(false)
                 .build());
 
         // __ENABLE__ attribute
