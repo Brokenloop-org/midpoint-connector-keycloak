@@ -67,17 +67,21 @@ public class KeycloakAdminRESTGroup implements KeycloakClient.Group {
 
     @Override
     public Uid createGroup(KeycloakSchema schema, String realmName, Set<Attribute> createAttributes) throws AlreadyExistsException {
+        // Extract the parent group id (if any) before building the representation.
+        // KC silently ignores parentId on the create payload, so nesting requires
+        // the subGroup() endpoint on the parent.
+        String parentId = null;
+        for (Attribute attr : createAttributes) {
+            if (attr.getName().equals(ATTR_PARENT_GROUP)) {
+                parentId = AttributeUtil.getAsStringValue(attr);
+                break;
+            }
+        }
+
         GroupRepresentation rep = toGroupRep(schema, createAttributes);
 
         Response res;
-
-        // We use "path" field ad temporary store.
-        // Don't forget clear it before submitting.
-        String parentId = rep.getPath();
         if (parentId != null) {
-            rep.setPath(null);
-
-            // Keycloak creates sub group with parent group
             res = groups(realmName).group(parentId).subGroup(rep);
         } else {
             res = groups(realmName).add(rep);
@@ -96,9 +100,7 @@ public class KeycloakAdminRESTGroup implements KeycloakClient.Group {
                 newGroup.setName(AttributeUtil.getAsStringValue(attr));
 
             } else if (attr.getName().equals(ATTR_PARENT_GROUP)) {
-                // We use "path" field ad temporary store.
-                // Don't forget clear it before submitting.
-                newGroup.setPath(AttributeUtil.getAsStringValue(attr));
+                // parentId is handled separately by createGroup; skip here.
 
             } else {
                 if (!schema.isGroupSchema(attr)) {
