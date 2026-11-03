@@ -175,4 +175,19 @@ class KeycloakUserLifecycleIT extends AbstractKeycloakIT {
         assertEquals(1, sessionCount(uid));
         assertEquals(200, refresh(refreshToken));
     }
+
+    @Test
+    void disablingAnAlreadyDisabledUserDoesNotLogout() throws Exception {
+        Uid uid = createUserWithPassword("alice-twice");
+        openSession("alice-twice");
+        // Disabling without the flag leaves the session open (see disableWithoutFlagKeepsSessions).
+        update(connector, uid, AttributeDeltaBuilder.buildEnabled(false));
+        assertEquals(1, sessionCount(uid));
+
+        // The user is already disabled, so no logout call may be made: the session survives.
+        update(logoutConnector, uid, AttributeDeltaBuilder.buildEnabled(false));
+
+        assertFalse(rep(uid).isEnabled());
+        assertEquals(1, sessionCount(uid));
+    }
 }
