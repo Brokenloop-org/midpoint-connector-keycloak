@@ -15,6 +15,8 @@
  */
 package org.brokenloop.midpoint.keycloak.connector.rest;
 
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.exc.UnrecognizedPropertyException;
 import org.brokenloop.midpoint.keycloak.connector.KeycloakClient;
 import org.brokenloop.midpoint.keycloak.connector.KeycloakConfiguration;
@@ -29,6 +31,7 @@ import org.keycloak.admin.client.resource.RealmResource;
 import org.keycloak.representations.info.ServerInfoRepresentation;
 
 import jakarta.ws.rs.ProcessingException;
+import jakarta.ws.rs.ext.ContextResolver;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -44,6 +47,16 @@ public class KeycloakAdminRESTAdminClient implements KeycloakClient {
 
     private static final Log LOGGER = Log.getLog(KeycloakAdminRESTAdminClient.class);
 
+    private static final ContextResolver<ObjectMapper> LENIENT_MAPPER_RESOLVER = new ContextResolver<>() {
+        private final ObjectMapper mapper = new ObjectMapper()
+                .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+
+        @Override
+        public ObjectMapper getContext(Class<?> type) {
+            return mapper;
+        }
+    };
+
     private final String instanceName;
     private final KeycloakAdminRESTUser user;
     private final KeycloakAdminRESTGroup group;
@@ -58,6 +71,8 @@ public class KeycloakAdminRESTAdminClient implements KeycloakClient {
 
         ResteasyClientBuilder resteasyClientBuilder = new ResteasyClientBuilderImpl();
         resteasyClientBuilder.connectionPoolSize(20);
+        // Tolerate fields that newer servers add to representations unknown to this client version.
+        resteasyClientBuilder.register(LENIENT_MAPPER_RESOLVER);
 
         // HTTP proxy configuration
         if (configuration.getHttpProxyHost() != null && configuration.getHttpProxyPort() != 0) {

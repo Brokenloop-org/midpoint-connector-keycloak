@@ -193,7 +193,7 @@
             <dependency>
                 <groupId>org.keycloak</groupId>
                 <artifactId>keycloak-admin-client</artifactId>
-                <version>26.0.7</version>
+                <version>26.0.12</version>
             </dependency>
             <!-- Align Jackson versions: KC 26 brings core 2.17.2 but RESTEasy
                  brings Jakarta RS provider 2.15.4, causing serialization failures
