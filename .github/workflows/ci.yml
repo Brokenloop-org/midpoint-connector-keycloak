@@ -27,7 +27,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        kc-version: ['26.5.7']
+        kc-version: ['26.5.7', '26.8.1']
     services:
       keycloak:
         image: quay.io/keycloak/keycloak:${{ matrix.kc-version }}

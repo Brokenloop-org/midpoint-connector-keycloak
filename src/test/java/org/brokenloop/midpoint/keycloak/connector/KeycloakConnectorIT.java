@@ -29,6 +29,12 @@ class KeycloakConnectorIT extends AbstractKeycloakIT {
     }
 
     @Test
+    void serverIs26_8() {
+        assertTrue(connector.client.getVersion().startsWith("26.8"),
+                "Expected Keycloak 26.8.x but was " + connector.client.getVersion());
+    }
+
+    @Test
     void schema_containsAllObjectClasses() {
         Schema schema = connector.schema();
         assertNotNull(schema);
