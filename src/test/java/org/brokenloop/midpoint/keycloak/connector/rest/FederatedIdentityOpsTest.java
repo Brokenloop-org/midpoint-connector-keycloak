@@ -136,6 +136,22 @@ class FederatedIdentityOpsTest {
         return realm;
     }
 
+    private static RealmResource realmWithTwoIdps() {
+        RealmResource realm = mock(RealmResource.class);
+        IdentityProvidersResource idps = mock(IdentityProvidersResource.class);
+        IdentityProviderRepresentation idp1 = new IdentityProviderRepresentation();
+        idp1.setAlias("idp-1");
+        IdentityProviderRepresentation idp2 = new IdentityProviderRepresentation();
+        idp2.setAlias("idp-2");
+        when(realm.identityProviders()).thenReturn(idps);
+        when(idps.findAll()).thenReturn(List.of(idp1, idp2));
+        return realm;
+    }
+
+    private static String json2(String userId) {
+        return "{\"identityProvider\":\"idp-2\",\"userId\":\"" + userId + "\",\"userName\":\"" + userId + "\"}";
+    }
+
     private static String json(String userId) {
         return "{\"identityProvider\":\"idp-1\",\"userId\":\"" + userId + "\",\"userName\":\"" + userId + "\"}";
     }
@@ -184,5 +200,28 @@ class FederatedIdentityOpsTest {
     void duplicateAliasInCreateIsRejected() {
         assertThrows(InvalidAttributeValueException.class,
                 () -> FederatedIdentityOps.parseAndValidate(realmWithIdp1(), List.of(json("a"), json("b"))));
+    }
+
+    @Test
+    void twoAliasesOnlyOneChangesPlansOnlyThatAlias() {
+        AttributeDeltaBuilder b = new AttributeDeltaBuilder();
+        b.setName("federatedIdentities");
+        b.addValueToReplace(json("a"));
+        b.addValueToReplace(json2("changed"));
+        FederatedIdentityOps.Plan plan = FederatedIdentityOps.plan(realmWithTwoIdps(),
+                List.of(link("idp-1", "a"), link("idp-2", "b")), b.build());
+        assertEquals(List.of("idp-2"), plan.remove());
+        assertEquals(1, plan.add().size());
+        assertEquals("idp-2", plan.add().get(0).getIdentityProvider());
+        assertEquals("changed", plan.add().get(0).getUserId());
+    }
+
+    @Test
+    void twoAliasesRemovingOneLeavesTheOtherUntouched() {
+        AttributeDelta delta = AttributeDeltaBuilder.build("federatedIdentities", List.of(), List.of(json2("b")));
+        FederatedIdentityOps.Plan plan = FederatedIdentityOps.plan(realmWithTwoIdps(),
+                List.of(link("idp-1", "a"), link("idp-2", "b")), delta);
+        assertEquals(List.of("idp-2"), plan.remove());
+        assertTrue(plan.add().isEmpty());
     }
 }
