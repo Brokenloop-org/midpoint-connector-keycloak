@@ -424,7 +424,7 @@ public class KeycloakAdminRESTGroup implements KeycloakClient.Group {
 
             AttributeBuilder ab = new AttributeBuilder();
             ab.setName(ATTR_PARENT_GROUP).setAttributeValueCompleteness(AttributeValueCompleteness.INCOMPLETE);
-            ab.addValue(Collections.EMPTY_LIST);
+            ab.addValue(Collections.emptyList());
             builder.addAttribute(ab.build());
         } else {
             if (attributesToGet == null) {
@@ -452,7 +452,7 @@ public class KeycloakAdminRESTGroup implements KeycloakClient.Group {
             if (allowPartialAttributeValues) {
                 AttributeBuilder ab = new AttributeBuilder();
                 ab.setName(attrName).setAttributeValueCompleteness(AttributeValueCompleteness.INCOMPLETE);
-                ab.addValue(Collections.EMPTY_LIST);
+                ab.addValue(Collections.emptyList());
                 builder.addAttribute(ab.build());
 
             } else if (attributesToGet != null && shouldReturn(attributesToGet, attrName)) {

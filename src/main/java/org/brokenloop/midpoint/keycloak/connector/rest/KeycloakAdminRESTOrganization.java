@@ -362,7 +362,7 @@ public class KeycloakAdminRESTOrganization implements KeycloakClient.Organizatio
         if (allowPartial) {
             AttributeBuilder ab = new AttributeBuilder();
             ab.setName(ATTR_MEMBERS).setAttributeValueCompleteness(AttributeValueCompleteness.INCOMPLETE);
-            ab.addValue(Collections.EMPTY_LIST);
+            ab.addValue(Collections.emptyList());
             builder.addAttribute(ab.build());
         } else if (attributesToGet != null && shouldReturn(attributesToGet, ATTR_MEMBERS)) {
             try {

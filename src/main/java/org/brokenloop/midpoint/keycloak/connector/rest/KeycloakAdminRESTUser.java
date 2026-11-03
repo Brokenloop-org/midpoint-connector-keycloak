@@ -646,7 +646,7 @@ public class KeycloakAdminRESTUser implements KeycloakClient.User {
 
             AttributeBuilder ab = new AttributeBuilder();
             ab.setName(ATTR_GROUPS).setAttributeValueCompleteness(AttributeValueCompleteness.INCOMPLETE);
-            ab.addValue(Collections.EMPTY_LIST);
+            ab.addValue(Collections.emptyList());
             builder.addAttribute(ab.build());
         } else {
             if (attributesToGet == null) {
@@ -674,7 +674,7 @@ public class KeycloakAdminRESTUser implements KeycloakClient.User {
             if (allowPartialAttributeValues) {
                 AttributeBuilder ab = new AttributeBuilder();
                 ab.setName(attrName).setAttributeValueCompleteness(AttributeValueCompleteness.INCOMPLETE);
-                ab.addValue(Collections.EMPTY_LIST);
+                ab.addValue(Collections.emptyList());
                 builder.addAttribute(ab.build());
 
             } else if (attributesToGet != null && shouldReturn(attributesToGet, attrName)) {
@@ -693,7 +693,7 @@ public class KeycloakAdminRESTUser implements KeycloakClient.User {
         if (allowPartialAttributeValues) {
             AttributeBuilder ab = new AttributeBuilder();
             ab.setName(ATTR_FEDERATED_IDENTITIES).setAttributeValueCompleteness(AttributeValueCompleteness.INCOMPLETE);
-            ab.addValue(Collections.EMPTY_LIST);
+            ab.addValue(Collections.emptyList());
             builder.addAttribute(ab.build());
 
         } else if (attributesToGet != null && shouldReturn(attributesToGet, ATTR_FEDERATED_IDENTITIES)) {
