@@ -134,6 +134,27 @@ class KeycloakConfigurationTest {
     }
 
     @Test
+    void ignoredRolesAreCopiedInAndOut() {
+        KeycloakConfiguration c = config();
+        String[] given = {"role-a"};
+        c.setIgnoredRoles(given);
+        given[0] = "mutated";
+        c.getIgnoredRoles()[0] = "mutated-too";
+        assertArrayEquals(new String[]{"role-a"}, c.getIgnoredRoles());
+        assertEquals(java.util.Set.of("role-a"), c.ignoredRolesResolved());
+    }
+
+    @Test
+    void changingTargetRealmRefreshesTheResolvedIgnoreList() {
+        KeycloakConfiguration c = config();
+        c.setTargetRealmName("realm-1");
+        assertTrue(c.ignoredRolesResolved().contains("default-roles-realm-1"));
+        c.setTargetRealmName("realm-2");
+        assertTrue(c.ignoredRolesResolved().contains("default-roles-realm-2"));
+        assertFalse(c.ignoredRolesResolved().contains("default-roles-realm-1"));
+    }
+
+    @Test
     void newFlagsDefaultFalse() {
         KeycloakConfiguration c = config();
         assertFalse(c.isLogoutOnDisable());

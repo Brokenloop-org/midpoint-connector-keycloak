@@ -221,8 +221,9 @@ public class KeycloakAdminRESTUser implements KeycloakClient.User {
                 if (schema.isMultiValuedUserSchema(attr)) {
                     Map<String, List<String>> attrs = newUser.getAttributes();
                     if (attrs == null) {
-                        attrs = new HashMap();
+                        attrs = new HashMap<>();
                     }
+                    newUser.setAttributes(attrs);
                     attrs.put(attr.getName(), attr.getValue().stream().map(a -> a.toString()).collect(Collectors.toList()));
 
                 } else {
@@ -347,7 +348,7 @@ public class KeycloakAdminRESTUser implements KeycloakClient.User {
                     if (schema.isMultiValuedUserSchema(delta)) {
                         Map<String, List<String>> attrs = current.getAttributes();
                         if (attrs == null) {
-                            attrs = new HashMap();
+                            attrs = new HashMap<>();
                         }
                         List<String> values = attrs.getOrDefault(delta.getName(), new ArrayList<>());
                         attrs.put(delta.getName(), values);

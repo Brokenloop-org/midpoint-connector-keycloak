@@ -186,7 +186,7 @@ public class KeycloakAdminRESTGroup implements KeycloakClient.Group {
                     if (schema.isMultiValuedGroupSchema(delta)) {
                         Map<String, List<String>> attrs = current.getAttributes();
                         if (attrs == null) {
-                            attrs = new HashMap();
+                            attrs = new HashMap<>();
                         }
                         List<String> values = attrs.getOrDefault(delta.getName(), new ArrayList<>());
                         attrs.put(delta.getName(), values);

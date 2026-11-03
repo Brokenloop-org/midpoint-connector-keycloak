@@ -158,8 +158,8 @@ public class KeycloakConfiguration extends AbstractConfiguration {
     }
 
     public void setTargetRealmName(String targetRealmName) {
-        this.cachedIgnoredRoles = null;
         this.targetRealmName = targetRealmName;
+        this.cachedIgnoredRoles = null;
     }
 
     @ConfigurationProperty(
@@ -359,11 +359,11 @@ public class KeycloakConfiguration extends AbstractConfiguration {
             required = false,
             confidential = false)
     public String[] getIgnoredRoles() {
-        return ignoredRoles;
+        return ignoredRoles == null ? null : ignoredRoles.clone();
     }
 
     public void setIgnoredRoles(String[] ignoredRoles) {
-        this.ignoredRoles = ignoredRoles;
+        this.ignoredRoles = ignoredRoles == null ? null : ignoredRoles.clone();
         this.cachedIgnoredRoles = null;
     }
 
