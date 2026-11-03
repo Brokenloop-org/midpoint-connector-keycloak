@@ -158,6 +158,8 @@ public class KeycloakAdminRESTGroup implements KeycloakClient.Group {
         String newParentGroupId = null;
         AttributeDelta realmRolesDelta = null;
         AttributeDelta clientRolesDelta = null;
+        RoleDiff realmDiff = null;
+        RoleDiff clientDiff = null;
 
         try {
             GroupResource group = resource.group(uid.getUidValue());
@@ -215,6 +217,21 @@ public class KeycloakAdminRESTGroup implements KeycloakClient.Group {
                 }
             }
 
+            // Validate the role adds before the first write so a bad role does not leave a half-applied update.
+            if (realmRolesDelta != null || clientRolesDelta != null) {
+                Set<String> ignoredRoles = configuration.resolveIgnoredRoles();
+                RoleMappingResource rm = group.roles();
+                if (realmRolesDelta != null) {
+                    realmDiff = RoleMappings.diff(RoleMappingOps.readRealm(rm, ignoredRoles), realmRolesDelta, ignoredRoles);
+                }
+                if (clientRolesDelta != null) {
+                    clientDiff = RoleMappings.diff(RoleMappingOps.readClient(rm, ignoredRoles), clientRolesDelta, ignoredRoles);
+                }
+                RoleMappingOps.requireExisting(realm(realmName),
+                        realmDiff == null ? Set.of() : realmDiff.toAdd(),
+                        clientDiff == null ? Set.of() : clientDiff.toAdd());
+            }
+
             // TODO Optimize update if no diff
             group.update(current);
 
@@ -246,17 +263,14 @@ public class KeycloakAdminRESTGroup implements KeycloakClient.Group {
             }
         }
 
-        if (realmRolesDelta != null || clientRolesDelta != null) {
-            Set<String> ignoredRoles = configuration.resolveIgnoredRoles();
+        if (realmDiff != null || clientDiff != null) {
             RoleMappingResource rm = groups(realmName).group(uid.getUidValue()).roles();
             RealmResource realm = realm(realmName);
-            if (realmRolesDelta != null) {
-                RoleMappingOps.applyRealm(realm, rm,
-                        RoleMappings.diff(RoleMappingOps.readRealm(rm, ignoredRoles), realmRolesDelta, ignoredRoles));
+            if (realmDiff != null) {
+                RoleMappingOps.applyRealm(realm, rm, realmDiff);
             }
-            if (clientRolesDelta != null) {
-                RoleMappingOps.applyClient(realm, rm,
-                        RoleMappings.diff(RoleMappingOps.readClient(rm, ignoredRoles), clientRolesDelta, ignoredRoles));
+            if (clientDiff != null) {
+                RoleMappingOps.applyClient(realm, rm, clientDiff);
             }
         }
     }

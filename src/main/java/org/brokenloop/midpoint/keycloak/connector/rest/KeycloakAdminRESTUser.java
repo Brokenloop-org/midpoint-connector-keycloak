@@ -98,6 +98,11 @@ public class KeycloakAdminRESTUser implements KeycloakClient.User {
             }
         }
 
+        // Validate roles and links before creating the user so a bad value does not leave a half-created user behind.
+        addRealmRoles = RoleMappings.withoutIgnored(addRealmRoles, ignoredRoles);
+        addClientRoles = RoleMappings.withoutIgnored(addClientRoles, ignoredRoles);
+        RoleMappingOps.requireExisting(realm(realmName), addRealmRoles, addClientRoles);
+
         // Validate the links before creating the user so a bad link does not leave a half-created user behind.
         List<FederatedIdentityRepresentation> addLinks = FederatedIdentityOps.parseAndValidate(
                 realm(realmName), federatedIdentities == null ? null : federatedIdentities.getValue());
@@ -147,10 +152,8 @@ public class KeycloakAdminRESTUser implements KeycloakClient.User {
         if (!addRealmRoles.isEmpty() || !addClientRoles.isEmpty()) {
             RoleMappingResource rm = users(realmName).get(uuid).roles();
             RealmResource realm = realm(realmName);
-            RoleMappingOps.applyRealm(realm, rm,
-                    new RoleDiff(RoleMappings.withoutIgnored(addRealmRoles, ignoredRoles), Set.of()));
-            RoleMappingOps.applyClient(realm, rm,
-                    new RoleDiff(RoleMappings.withoutIgnored(addClientRoles, ignoredRoles), Set.of()));
+            RoleMappingOps.applyRealm(realm, rm, new RoleDiff(addRealmRoles, Set.of()));
+            RoleMappingOps.applyClient(realm, rm, new RoleDiff(addClientRoles, Set.of()));
         }
 
         if (!addLinks.isEmpty()) {
@@ -258,6 +261,8 @@ public class KeycloakAdminRESTUser implements KeycloakClient.User {
         AttributeDelta clientRolesDelta = null;
         AttributeDelta federatedIdentitiesDelta = null;
         FederatedIdentityOps.Plan linkPlan = null;
+        RoleDiff realmDiff = null;
+        RoleDiff clientDiff = null;
         boolean userAttributeChanged = false;
         boolean disabled = false;
 
@@ -386,8 +391,28 @@ public class KeycloakAdminRESTUser implements KeycloakClient.User {
                         federatedIdentitiesDelta);
             }
 
+            // Validate the role adds before the first write so a bad role does not leave a half-applied update.
+            if (realmRolesDelta != null || clientRolesDelta != null) {
+                Set<String> ignoredRoles = configuration.resolveIgnoredRoles();
+                RoleMappingResource rm = user.roles();
+                if (realmRolesDelta != null) {
+                    realmDiff = RoleMappings.diff(RoleMappingOps.readRealm(rm, ignoredRoles), realmRolesDelta, ignoredRoles);
+                }
+                if (clientRolesDelta != null) {
+                    clientDiff = RoleMappings.diff(RoleMappingOps.readClient(rm, ignoredRoles), clientRolesDelta, ignoredRoles);
+                }
+                RoleMappingOps.requireExisting(realm(realmName),
+                        realmDiff == null ? Set.of() : realmDiff.toAdd(),
+                        clientDiff == null ? Set.of() : clientDiff.toAdd());
+            }
+
             if (userAttributeChanged) {
                 user.update(current);
+            }
+
+            // End sessions right after the disable is written, independent of the later sub-resource calls.
+            if (disabled && configuration.isLogoutOnDisable()) {
+                user.logout();
             }
 
         } catch (NotFoundException e) {
@@ -419,26 +444,19 @@ public class KeycloakAdminRESTUser implements KeycloakClient.User {
             }
         }
 
-        if (realmRolesDelta != null || clientRolesDelta != null) {
-            Set<String> ignoredRoles = configuration.resolveIgnoredRoles();
+        if (realmDiff != null || clientDiff != null) {
             RoleMappingResource rm = users(realmName).get(current.getId()).roles();
             RealmResource realm = realm(realmName);
-            if (realmRolesDelta != null) {
-                RoleMappingOps.applyRealm(realm, rm,
-                        RoleMappings.diff(RoleMappingOps.readRealm(rm, ignoredRoles), realmRolesDelta, ignoredRoles));
+            if (realmDiff != null) {
+                RoleMappingOps.applyRealm(realm, rm, realmDiff);
             }
-            if (clientRolesDelta != null) {
-                RoleMappingOps.applyClient(realm, rm,
-                        RoleMappings.diff(RoleMappingOps.readClient(rm, ignoredRoles), clientRolesDelta, ignoredRoles));
+            if (clientDiff != null) {
+                RoleMappingOps.applyClient(realm, rm, clientDiff);
             }
         }
 
         if (linkPlan != null && !linkPlan.isEmpty()) {
             FederatedIdentityOps.apply(users(realmName).get(current.getId()), linkPlan);
-        }
-
-        if (disabled && configuration.isLogoutOnDisable()) {
-            users(realmName).get(current.getId()).logout();
         }
     }
 

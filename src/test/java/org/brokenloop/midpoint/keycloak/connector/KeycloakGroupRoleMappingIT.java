@@ -146,4 +146,14 @@ class KeycloakGroupRoleMappingIT extends AbstractKeycloakIT {
                 () -> createGroup("group-halfway", AttributeBuilder.build("realmRoles", "nope")));
         assertNull(searchByName(connector, GROUP_OBJECT_CLASS, "group-halfway"));
     }
+
+    @Test
+    void unknownRoleOnUpdateLeavesGroupUnchanged() {
+        Uid uid = createGroup("group-nowrite");
+        assertThrows(InvalidAttributeValueException.class,
+                () -> update(uid, AttributeDeltaBuilder.build("__NAME__", "group-renamed"),
+                        AttributeDeltaBuilder.build("realmRoles", List.of("nope"), List.of())));
+        assertNotNull(searchByName(connector, GROUP_OBJECT_CLASS, "group-nowrite"));
+        assertNull(searchByName(connector, GROUP_OBJECT_CLASS, "group-renamed"));
+    }
 }

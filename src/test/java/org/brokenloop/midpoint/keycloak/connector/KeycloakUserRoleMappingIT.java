@@ -19,6 +19,7 @@ class KeycloakUserRoleMappingIT extends AbstractKeycloakIT {
 
     static final String REALM = "it-user-roles";
     static KeycloakConnector connector;
+    static KeycloakConnector logoutConnector;
     static String app1Uuid;
 
     @BeforeAll
@@ -40,11 +41,17 @@ class KeycloakUserRoleMappingIT extends AbstractKeycloakIT {
             clientRoles.create(role("cr-2"));
         }
         connector = newConnector(REALM);
+        KeycloakConfiguration cfg = buildConfiguration(REALM);
+        cfg.setLogoutOnDisable(true);
+        logoutConnector = new KeycloakConnector();
+        logoutConnector.setInstanceName("test-logout");
+        logoutConnector.init(cfg);
     }
 
     @AfterAll
     static void teardown() {
         if (connector != null) connector.dispose();
+        if (logoutConnector != null) logoutConnector.dispose();
         teardownRealm(REALM);
     }
 
@@ -150,5 +157,37 @@ class KeycloakUserRoleMappingIT extends AbstractKeycloakIT {
         assertEquals(Set.of("cr-2"), directClient(uid));
         ConnectorObject o = searchByUidWithAttrs(connector, USER_OBJECT_CLASS, uid, "clientRoles");
         assertEquals(Set.of(app1Uuid + "/cr-2"), values(o, "clientRoles"));
+    }
+
+    @Test
+    void unknownRoleOnCreateLeavesNoUserBehind() {
+        assertThrows(InvalidAttributeValueException.class,
+                () -> createUser("alice-halfway", AttributeBuilder.build("realmRoles", "nope")));
+        assertNull(searchByName(connector, USER_OBJECT_CLASS, "alice-halfway"));
+        assertThrows(InvalidAttributeValueException.class,
+                () -> createUser("alice-halfway", AttributeBuilder.build("clientRoles", app1Uuid + "/nope")));
+        assertNull(searchByName(connector, USER_OBJECT_CLASS, "alice-halfway"));
+    }
+
+    @Test
+    void unknownRoleOnUpdateLeavesUserAttributesUnchanged() {
+        Uid uid = createUser("alice-nowrite", AttributeBuilder.build("firstName", "Before"));
+        assertThrows(InvalidAttributeValueException.class,
+                () -> update(uid, AttributeDeltaBuilder.build("firstName", "After"),
+                        AttributeDeltaBuilder.build("realmRoles", List.of("role-a", "nope"), List.of())));
+        ConnectorObject o = searchByUid(connector, USER_OBJECT_CLASS, uid);
+        assertEquals("Before", o.getAttributeByName("firstName").getValue().get(0));
+        assertEquals(Set.of("default-roles-" + REALM), directRealm(uid));
+    }
+
+    @Test
+    void disableWithUnknownRoleFailsAndWritesNothing() {
+        Uid uid = createUser("alice-nodisable", AttributeBuilder.buildEnabled(true));
+        assertThrows(InvalidAttributeValueException.class,
+                () -> logoutConnector.updateDelta(USER_OBJECT_CLASS, uid,
+                        new HashSet<>(List.of(AttributeDeltaBuilder.buildEnabled(false),
+                                AttributeDeltaBuilder.build("realmRoles", List.of("nope"), List.of()))), null));
+        ConnectorObject o = searchByUid(connector, USER_OBJECT_CLASS, uid);
+        assertEquals(Boolean.TRUE, o.getAttributeByName(OperationalAttributes.ENABLE_NAME).getValue().get(0));
     }
 }
