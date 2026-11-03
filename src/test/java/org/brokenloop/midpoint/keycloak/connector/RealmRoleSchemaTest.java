@@ -43,4 +43,16 @@ class RealmRoleSchemaTest {
         AttributeInfo attrs = findAttribute(schema, "attributes").orElseThrow();
         assertTrue(attrs.isMultiValued());
     }
+
+    @Test
+    void compositeAttributes_multiValued_updateable_notReturnedByDefault() {
+        ObjectClassInfo schema = KeycloakRealmRoleHandler.getSchema(new String[]{});
+        for (String name : new String[]{"compositeRealmRoles", "compositeClientRoles"}) {
+            AttributeInfo info = findAttribute(schema, name).orElseThrow();
+            assertTrue(info.isMultiValued(), name);
+            assertTrue(info.isCreateable(), name);
+            assertTrue(info.isUpdateable(), name);
+            assertFalse(info.isReturnedByDefault(), name);
+        }
+    }
 }

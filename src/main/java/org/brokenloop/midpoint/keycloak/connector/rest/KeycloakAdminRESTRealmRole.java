@@ -13,6 +13,7 @@ import jakarta.ws.rs.NotFoundException;
 import org.brokenloop.midpoint.keycloak.connector.KeycloakClient;
 import org.brokenloop.midpoint.keycloak.connector.KeycloakConfiguration;
 import org.brokenloop.midpoint.keycloak.connector.KeycloakSchema;
+import org.brokenloop.midpoint.keycloak.connector.RoleDiff;
 import org.identityconnectors.common.logging.Log;
 import org.identityconnectors.framework.common.exceptions.AlreadyExistsException;
 import org.identityconnectors.framework.common.exceptions.InvalidAttributeValueException;
@@ -20,6 +21,7 @@ import org.identityconnectors.framework.common.exceptions.UnknownUidException;
 import org.identityconnectors.framework.common.objects.*;
 import org.keycloak.admin.client.Keycloak;
 import org.keycloak.admin.client.resource.RealmResource;
+import org.keycloak.admin.client.resource.RoleResource;
 import org.keycloak.admin.client.resource.RolesResource;
 import org.keycloak.representations.idm.RoleRepresentation;
 
@@ -55,11 +57,27 @@ public class KeycloakAdminRESTRealmRole implements KeycloakClient.RealmRole {
 
     @Override
     public Uid createRealmRole(KeycloakSchema schema, String realmName, Set<Attribute> createAttributes) throws AlreadyExistsException {
-        RoleRepresentation rep = toRealmRoleRep(createAttributes);
+        Set<String> compositeRealm = new LinkedHashSet<>();
+        Set<String> compositeClient = new LinkedHashSet<>();
+        Set<Attribute> roleAttributes = new HashSet<>();
+        for (Attribute attr : createAttributes) {
+            if (attr.getName().equals(ATTR_COMPOSITE_REALM_ROLES)) {
+                compositeRealm.addAll(CompositeOps.valuesOf(attr));
+            } else if (attr.getName().equals(ATTR_COMPOSITE_CLIENT_ROLES)) {
+                compositeClient.addAll(CompositeOps.valuesOf(attr));
+            } else {
+                roleAttributes.add(attr);
+            }
+        }
+
+        RoleRepresentation rep = toRealmRoleRep(roleAttributes);
 
         if (rep.getName() == null) {
             throw new InvalidAttributeValueException("Must define name for the realmRole object");
         }
+
+        // Validate the children up-front so an unknown child does not leave a half-created role behind.
+        RoleMappingOps.requireExisting(realm(realmName), compositeRealm, compositeClient);
 
         roles(realmName).create(rep);
 
@@ -71,6 +89,11 @@ public class KeycloakAdminRESTRealmRole implements KeycloakClient.RealmRole {
                 && (created.getAttributes() == null || created.getAttributes().isEmpty())) {
             created.setAttributes(rep.getAttributes());
             realm(realmName).rolesById().updateRole(created.getId(), created);
+        }
+
+        if (!compositeRealm.isEmpty() || !compositeClient.isEmpty()) {
+            CompositeOps.apply(realm(realmName), roles(realmName).get(created.getName()),
+                    new RoleDiff(compositeRealm, Set.of()), new RoleDiff(compositeClient, Set.of()));
         }
 
         return new Uid(created.getId(), new Name(created.getName()));
@@ -117,9 +140,17 @@ public class KeycloakAdminRESTRealmRole implements KeycloakClient.RealmRole {
     public void updateRealmRole(KeycloakSchema schema, String realmName, Uid uid, Set<AttributeDelta> modifications, OperationOptions options) throws UnknownUidException {
         try {
             RoleRepresentation current = realm(realmName).rolesById().getRole(uid.getUidValue());
+            AttributeDelta compositeRealmDelta = null;
+            AttributeDelta compositeClientDelta = null;
 
             for (AttributeDelta delta : modifications) {
-                if (delta.getName().equals(Name.NAME)) {
+                if (delta.getName().equals(ATTR_COMPOSITE_REALM_ROLES)) {
+                    compositeRealmDelta = delta;
+
+                } else if (delta.getName().equals(ATTR_COMPOSITE_CLIENT_ROLES)) {
+                    compositeClientDelta = delta;
+
+                } else if (delta.getName().equals(Name.NAME)) {
                     current.setName(AttributeDeltaUtil.getAsStringValue(delta));
 
                 } else if (delta.getName().equals(ATTR_DESCRIPTION)) {
@@ -150,7 +181,27 @@ public class KeycloakAdminRESTRealmRole implements KeycloakClient.RealmRole {
                 }
             }
 
+            RoleDiff realmDiff = new RoleDiff(Set.of(), Set.of());
+            RoleDiff clientDiff = new RoleDiff(Set.of(), Set.of());
+            if (compositeRealmDelta != null || compositeClientDelta != null) {
+                RoleResource existing = roles(realmName).get(
+                        realm(realmName).rolesById().getRole(uid.getUidValue()).getName());
+                if (compositeRealmDelta != null) {
+                    realmDiff = CompositeOps.diff(CompositeOps.readRealm(existing), compositeRealmDelta);
+                }
+                if (compositeClientDelta != null) {
+                    clientDiff = CompositeOps.diff(CompositeOps.readClient(realm(realmName), existing),
+                            compositeClientDelta);
+                }
+                CompositeOps.requireExisting(realm(realmName), realmDiff, clientDiff);
+            }
+
             realm(realmName).rolesById().updateRole(current.getId(), current);
+
+            // The role may have been renamed, so look it up again by its (new) name.
+            if (compositeRealmDelta != null || compositeClientDelta != null) {
+                CompositeOps.apply(realm(realmName), roles(realmName).get(current.getName()), realmDiff, clientDiff);
+            }
 
         } catch (NotFoundException e) {
             LOGGER.warn("Not found realmRole when updating. uid: {0}", uid);
@@ -178,7 +229,7 @@ public class KeycloakAdminRESTRealmRole implements KeycloakClient.RealmRole {
         List<RoleRepresentation> roles = roles(realmName).list();
 
         for (RoleRepresentation rep : roles) {
-            if (!handler.handle(toConnectorObject(rep, attributesToGet, allowPartialAttributeValues))) {
+            if (!handler.handle(toConnectorObject(realmName, rep, attributesToGet, allowPartialAttributeValues))) {
                 KeycloakRESTUtils.signalAllResultsReturned(handler);
                 return;
             }
@@ -198,7 +249,7 @@ public class KeycloakAdminRESTRealmRole implements KeycloakClient.RealmRole {
                 return;
             }
             boolean allowPartialAttributeValues = shouldAllowPartialAttributeValues(options);
-            handler.handle(toConnectorObject(rep, attributesToGet, allowPartialAttributeValues));
+            handler.handle(toConnectorObject(realmName, rep, attributesToGet, allowPartialAttributeValues));
 
         } catch (NotFoundException e) {
             LOGGER.warn("[{0}] Unknown realmRole uuid: {1}", instanceName, uid.getUidValue());
@@ -215,14 +266,14 @@ public class KeycloakAdminRESTRealmRole implements KeycloakClient.RealmRole {
                 return;
             }
             boolean allowPartialAttributeValues = shouldAllowPartialAttributeValues(options);
-            handler.handle(toConnectorObject(rep, attributesToGet, allowPartialAttributeValues));
+            handler.handle(toConnectorObject(realmName, rep, attributesToGet, allowPartialAttributeValues));
 
         } catch (NotFoundException e) {
             LOGGER.warn("[{0}] Unknown realmRole name: {1}", instanceName, name.getNameValue());
         }
     }
 
-    private ConnectorObject toConnectorObject(RoleRepresentation rep, Set<String> attributesToGet,
+    private ConnectorObject toConnectorObject(String realmName, RoleRepresentation rep, Set<String> attributesToGet,
                                               boolean allowPartialAttributeValues) {
         ConnectorObjectBuilder builder = new ConnectorObjectBuilder()
                 .setObjectClass(REALM_ROLE_OBJECT_CLASS)
@@ -245,6 +296,27 @@ public class KeycloakAdminRESTRealmRole implements KeycloakClient.RealmRole {
             builder.addAttribute(ATTR_ATTRIBUTES, genericAttributes);
         }
 
+        addComposites(builder, realmName, rep, attributesToGet, allowPartialAttributeValues);
+
         return builder.build();
+    }
+
+    private void addComposites(ConnectorObjectBuilder builder, String realmName, RoleRepresentation rep,
+                               Set<String> attributesToGet, boolean allowPartialAttributeValues) {
+        for (String attrName : new String[]{ATTR_COMPOSITE_REALM_ROLES, ATTR_COMPOSITE_CLIENT_ROLES}) {
+            if (allowPartialAttributeValues) {
+                AttributeBuilder ab = new AttributeBuilder();
+                ab.setName(attrName).setAttributeValueCompleteness(AttributeValueCompleteness.INCOMPLETE);
+                ab.addValue(Collections.EMPTY_LIST);
+                builder.addAttribute(ab.build());
+
+            } else if (attributesToGet != null && shouldReturn(attributesToGet, attrName)) {
+                RoleResource resource = roles(realmName).get(rep.getName());
+                Set<String> values = attrName.equals(ATTR_COMPOSITE_REALM_ROLES)
+                        ? CompositeOps.readRealm(resource)
+                        : CompositeOps.readClient(realm(realmName), resource);
+                builder.addAttribute(attrName, new ArrayList<>(values));
+            }
+        }
     }
 }
