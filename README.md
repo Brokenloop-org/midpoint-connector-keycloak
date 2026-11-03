@@ -25,12 +25,58 @@ forward to current Keycloak versions and adds new object class support.
 
 | Object class | Notes |
 |---|---|
-| `user` | Full CRUD, password, group membership, custom attributes |
-| `group` | Full CRUD with hierarchy via `parentId`, custom attributes |
+| `user` | Full CRUD, password, group membership, custom attributes, role mappings, federated identity links, required actions |
+| `group` | Full CRUD with hierarchy via `parentId`, custom attributes, role mappings |
 | `client` | Full CRUD including the `type` field added in KC 25 |
-| `clientRole` | Full CRUD scoped to a client |
-| `realmRole` | Full CRUD (added in this fork) |
+| `clientRole` | Full CRUD scoped to a client, composite roles |
+| `realmRole` | Full CRUD (added in this fork), composite roles |
 | `organization` | Full CRUD with member management (KC 26+; gracefully omitted from schema if the server feature or realm flag is disabled) |
+
+### Role mappings, composites, identity links and required actions
+
+| Object class | Attribute | Multivalued | Value encoding |
+|---|---|---|---|
+| `user` | `realmRoles` | yes | realm role name |
+| `user` | `clientRoles` | yes | `<clientUUID>/<roleName>` |
+| `user` | `federatedIdentities` | yes | canonical JSON, see below |
+| `user` | `requiredActions` | yes | required action alias (e.g. `UPDATE_PASSWORD`) |
+| `group` | `realmRoles` | yes | realm role name |
+| `group` | `clientRoles` | yes | `<clientUUID>/<roleName>` |
+| `realmRole` | `compositeRealmRoles` | yes | realm role name |
+| `realmRole` | `compositeClientRoles` | yes | `<clientUUID>/<roleName>` |
+| `clientRole` | `compositeRealmRoles` | yes | realm role name |
+| `clientRole` | `compositeClientRoles` | yes | `<clientUUID>/<roleName>` |
+
+Encodings:
+
+- **Realm role**: the plain role name, e.g. `role-a`.
+- **Client role**: `<clientUUID>/<roleName>`, where the client UUID is the Keycloak
+  internal id of the client (not its `clientId`), e.g. `0b6f.../role-a`.
+- **Federated identity**: a JSON object with fixed key order and no whitespace,
+  `{"identityProvider":"idp-1","userId":"1234","userName":"alice"}`. `identityProvider`
+  and `userId` are required; `userName` defaults to `userId` when omitted on input.
+
+Semantics:
+
+- Only **direct** mappings are read and written. Roles a user inherits through group
+  membership or through composites are not expanded.
+- These attributes are **not returned by default**; request them explicitly (for
+  example with `attributesToGet` or MidPoint's "fetch" option).
+- Roles listed in `ignoredRoles` (see below) are never read, added or removed.
+
+## Configuration
+
+Options added in this fork, on top of those inherited from upstream:
+
+| Option | Default | Description |
+|---|---|---|
+| `ignoredRoles` | `default-roles-{realm}`, `offline_access`, `uma_authorization` | Role names that are never read, added or removed by role-mapping operations. `{realm}` is replaced with the target realm name. |
+| `logoutOnDisable` | `false` | When `true`, all sessions of a user are terminated when the user is disabled. |
+| `userProfileSchemaEnabled` | `false` | When `true`, user attributes declared in the realm's User Profile are added to the `user` schema. Explicitly configured user attributes that are missing from the User Profile are reported with a warning. |
+
+The Keycloak REST client uses a lenient JSON mapper: properties returned by the server
+that the admin client does not know about are ignored instead of failing the request.
+The admin client (26.0.12) is tested against Keycloak 26.8.1.
 
 ## Build
 
@@ -73,10 +119,17 @@ KC needs to be reachable at `http://localhost:8090` by default; override with
 
 ## Significant changes vs upstream
 
-- **Keycloak admin client upgraded to 26.0.7** (was stuck at 24.0.2)
+- **Keycloak admin client upgraded to 26.0.12** (was stuck at 24.0.2), tested against Keycloak 26.8.1
 - **Java 17 minimum** (required by KC 26)
 - **`realmRole` object class** for provisioning realm-level roles
 - **`organization` object class** (KC 26+ feature, with graceful detection of server/realm enablement)
+- **Role mappings** for users and groups (`realmRoles`, `clientRoles`), direct mappings only
+- **Composite roles** on `realmRole` and `clientRole` (`compositeRealmRoles`, `compositeClientRoles`)
+- **Federated identity links** on users (`federatedIdentities`)
+- **Required actions** on users (`requiredActions`)
+- **Optional session logout on disable** (`logoutOnDisable`)
+- **User Profile schema**: user attributes derived from the realm User Profile (`userProfileSchemaEnabled`)
+- **Lenient JSON mapper** in the REST client: unknown properties in server responses are ignored
 - **Client `type` field** (added in KC 25) exposed as a schema attribute
 - **ConnId search-contract compliance**: `SearchResultsHandler.handleResult(allResultsReturned=true)` is now signaled correctly, fixing phantom page counts in MidPoint and respecting handler return values for early termination
 - **Bug fixes** found by integration tests: Jackson version mismatch (KC 26 group serialization), client search-by-name NPE, password update HTTP 400 against KC 26
