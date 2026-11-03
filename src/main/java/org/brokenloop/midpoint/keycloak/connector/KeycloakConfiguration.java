@@ -16,6 +16,7 @@
 package org.brokenloop.midpoint.keycloak.connector;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
@@ -54,6 +55,7 @@ public class KeycloakConfiguration extends AbstractConfiguration {
     private GuardedString httpProxyPassword;
     private String httpProxyScheme = "http";
 
+    private transient volatile Set<String> cachedIgnoredRoles;
     private String[] ignoredRoles = {"default-roles-{realm}", "offline_access", "uma_authorization"};
     private boolean logoutOnDisable;
     private boolean userProfileSchemaEnabled;
@@ -156,6 +158,7 @@ public class KeycloakConfiguration extends AbstractConfiguration {
     }
 
     public void setTargetRealmName(String targetRealmName) {
+        this.cachedIgnoredRoles = null;
         this.targetRealmName = targetRealmName;
     }
 
@@ -361,6 +364,20 @@ public class KeycloakConfiguration extends AbstractConfiguration {
 
     public void setIgnoredRoles(String[] ignoredRoles) {
         this.ignoredRoles = ignoredRoles;
+        this.cachedIgnoredRoles = null;
+    }
+
+    /**
+     * Returns the resolved ignored role names, computed once and reused until the ignored roles or
+     * the target realm change. The returned set is unmodifiable.
+     */
+    public Set<String> ignoredRolesResolved() {
+        Set<String> cached = cachedIgnoredRoles;
+        if (cached == null) {
+            cached = Collections.unmodifiableSet(resolveIgnoredRoles());
+            cachedIgnoredRoles = cached;
+        }
+        return cached;
     }
 
     /**

@@ -80,7 +80,7 @@ public class KeycloakAdminRESTUser implements KeycloakClient.User {
     @Override
     public Uid createUser(KeycloakSchema schema, String realmName, Set<Attribute> createAttributes)
             throws AlreadyExistsException {
-        Set<String> ignoredRoles = configuration.resolveIgnoredRoles();
+        Set<String> ignoredRoles = configuration.ignoredRolesResolved();
         Set<String> addRealmRoles = new LinkedHashSet<>();
         Set<String> addClientRoles = new LinkedHashSet<>();
         Set<Attribute> userAttributes = new HashSet<>();
@@ -395,7 +395,7 @@ public class KeycloakAdminRESTUser implements KeycloakClient.User {
 
             // Validate the role adds before the first write so a bad role does not leave a half-applied update.
             if (realmRolesDelta != null || clientRolesDelta != null) {
-                Set<String> ignoredRoles = configuration.resolveIgnoredRoles();
+                Set<String> ignoredRoles = configuration.ignoredRolesResolved();
                 RoleMappingResource rm = user.roles();
                 if (realmRolesDelta != null) {
                     realmDiff = RoleMappings.diff(RoleMappingOps.readRealm(rm, ignoredRoles), realmRolesDelta, ignoredRoles);
@@ -678,7 +678,7 @@ public class KeycloakAdminRESTUser implements KeycloakClient.User {
                 builder.addAttribute(ab.build());
 
             } else if (attributesToGet != null && shouldReturn(attributesToGet, attrName)) {
-                Set<String> ignoredRoles = configuration.resolveIgnoredRoles();
+                Set<String> ignoredRoles = configuration.ignoredRolesResolved();
                 RoleMappingResource rm = users(realmName).get(user.getId()).roles();
                 Set<String> values = attrName.equals(ATTR_REALM_ROLES)
                         ? RoleMappingOps.readRealm(rm, ignoredRoles)
