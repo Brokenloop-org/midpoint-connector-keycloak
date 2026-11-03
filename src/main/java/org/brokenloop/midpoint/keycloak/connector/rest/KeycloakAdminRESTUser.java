@@ -19,6 +19,8 @@ import org.brokenloop.midpoint.keycloak.connector.KeycloakClient;
 import org.brokenloop.midpoint.keycloak.connector.KeycloakConfiguration;
 import org.brokenloop.midpoint.keycloak.connector.KeycloakSchema;
 import org.brokenloop.midpoint.keycloak.connector.KeycloakUtils;
+import org.brokenloop.midpoint.keycloak.connector.RoleDiff;
+import org.brokenloop.midpoint.keycloak.connector.RoleMappings;
 import org.identityconnectors.common.logging.Log;
 import org.identityconnectors.common.security.GuardedString;
 import org.identityconnectors.framework.common.exceptions.AlreadyExistsException;
@@ -27,6 +29,7 @@ import org.identityconnectors.framework.common.exceptions.UnknownUidException;
 import org.identityconnectors.framework.common.objects.*;
 import org.keycloak.admin.client.Keycloak;
 import org.keycloak.admin.client.resource.RealmResource;
+import org.keycloak.admin.client.resource.RoleMappingResource;
 import org.keycloak.admin.client.resource.UserResource;
 import org.keycloak.admin.client.resource.UsersResource;
 import org.keycloak.representations.idm.CredentialRepresentation;
@@ -75,7 +78,22 @@ public class KeycloakAdminRESTUser implements KeycloakClient.User {
     @Override
     public Uid createUser(KeycloakSchema schema, String realmName, Set<Attribute> createAttributes)
             throws AlreadyExistsException {
-        UserRepresentation newUser = toUserRep(schema, createAttributes);
+        Set<String> ignoredRoles = configuration.resolveIgnoredRoles();
+        Set<String> addRealmRoles = new LinkedHashSet<>();
+        Set<String> addClientRoles = new LinkedHashSet<>();
+        Set<Attribute> userAttributes = new HashSet<>();
+        for (Attribute attr : createAttributes) {
+            if (attr.getName().equals(ATTR_REALM_ROLES) || attr.getName().equals(ATTR_CLIENT_ROLES)) {
+                Set<String> target = attr.getName().equals(ATTR_REALM_ROLES) ? addRealmRoles : addClientRoles;
+                if (attr.getValue() != null) {
+                    attr.getValue().stream().filter(Objects::nonNull).map(Object::toString).forEach(target::add);
+                }
+            } else {
+                userAttributes.add(attr);
+            }
+        }
+
+        UserRepresentation newUser = toUserRep(schema, userAttributes);
 
         CredentialRepresentation credential = null;
         if (configuration.isPasswordResetAPIEnabled()) {
@@ -115,6 +133,15 @@ public class KeycloakAdminRESTUser implements KeycloakClient.User {
                             groupId, uuid, newUser.getUsername());
                 }
             }
+        }
+
+        if (!addRealmRoles.isEmpty() || !addClientRoles.isEmpty()) {
+            RoleMappingResource rm = users(realmName).get(uuid).roles();
+            RealmResource realm = realm(realmName);
+            RoleMappingOps.applyRealm(realm, rm,
+                    new RoleDiff(RoleMappings.withoutIgnored(addRealmRoles, ignoredRoles), Set.of()));
+            RoleMappingOps.applyClient(realm, rm,
+                    new RoleDiff(RoleMappings.withoutIgnored(addClientRoles, ignoredRoles), Set.of()));
         }
 
         return new Uid(uuid, new Name(newUser.getUsername()));
@@ -208,6 +235,8 @@ public class KeycloakAdminRESTUser implements KeycloakClient.User {
         List<String> addGroupIds = new ArrayList<>();
         List<String> removeGroupIds = new ArrayList<>();
         CredentialRepresentation credential = null;
+        AttributeDelta realmRolesDelta = null;
+        AttributeDelta clientRolesDelta = null;
         boolean userAttributeChanged = false;
 
         try {
@@ -268,6 +297,12 @@ public class KeycloakAdminRESTUser implements KeycloakClient.User {
                             removeGroupIds.add(group.toString());
                         }
                     }
+
+                } else if (delta.getName().equals(ATTR_REALM_ROLES)) {
+                    realmRolesDelta = delta;
+
+                } else if (delta.getName().equals(ATTR_CLIENT_ROLES)) {
+                    clientRolesDelta = delta;
 
                 } else if (schema.isUserSchema(delta)) {
                     userAttributeChanged = true;
@@ -344,6 +379,20 @@ public class KeycloakAdminRESTUser implements KeycloakClient.User {
             } catch (NotFoundException e) {
                 LOGGER.warn("The group is not found already. Skipping join the user. groupId: {0}, userId: {1}, username: {2}",
                         groupId, current.getId(), current.getUsername());
+            }
+        }
+
+        if (realmRolesDelta != null || clientRolesDelta != null) {
+            Set<String> ignoredRoles = configuration.resolveIgnoredRoles();
+            RoleMappingResource rm = users(realmName).get(current.getId()).roles();
+            RealmResource realm = realm(realmName);
+            if (realmRolesDelta != null) {
+                RoleMappingOps.applyRealm(realm, rm,
+                        RoleMappings.diff(RoleMappingOps.readRealm(rm, ignoredRoles), realmRolesDelta, ignoredRoles));
+            }
+            if (clientRolesDelta != null) {
+                RoleMappingOps.applyClient(realm, rm,
+                        RoleMappings.diff(RoleMappingOps.readClient(rm, ignoredRoles), clientRolesDelta, ignoredRoles));
             }
         }
     }
@@ -520,6 +569,28 @@ public class KeycloakAdminRESTUser implements KeycloakClient.User {
             }
         }
 
+        addRoleMappings(builder, realmName, user, attributesToGet, allowPartialAttributeValues);
+
         return builder.build();
+    }
+
+    private void addRoleMappings(ConnectorObjectBuilder builder, String realmName, UserRepresentation user,
+                                 Set<String> attributesToGet, boolean allowPartialAttributeValues) {
+        for (String attrName : new String[]{ATTR_REALM_ROLES, ATTR_CLIENT_ROLES}) {
+            if (allowPartialAttributeValues) {
+                AttributeBuilder ab = new AttributeBuilder();
+                ab.setName(attrName).setAttributeValueCompleteness(AttributeValueCompleteness.INCOMPLETE);
+                ab.addValue(Collections.EMPTY_LIST);
+                builder.addAttribute(ab.build());
+
+            } else if (attributesToGet != null && shouldReturn(attributesToGet, attrName)) {
+                Set<String> ignoredRoles = configuration.resolveIgnoredRoles();
+                RoleMappingResource rm = users(realmName).get(user.getId()).roles();
+                Set<String> values = attrName.equals(ATTR_REALM_ROLES)
+                        ? RoleMappingOps.readRealm(rm, ignoredRoles)
+                        : RoleMappingOps.readClient(rm, ignoredRoles);
+                builder.addAttribute(attrName, new ArrayList<>(values));
+            }
+        }
     }
 }
