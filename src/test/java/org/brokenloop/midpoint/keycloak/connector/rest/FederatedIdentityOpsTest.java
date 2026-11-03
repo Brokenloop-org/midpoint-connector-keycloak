@@ -2,7 +2,13 @@ package org.brokenloop.midpoint.keycloak.connector.rest;
 
 import jakarta.ws.rs.core.Response;
 import org.identityconnectors.framework.common.exceptions.AlreadyExistsException;
+import org.identityconnectors.framework.common.exceptions.ConnectorException;
 import org.identityconnectors.framework.common.exceptions.InvalidAttributeValueException;
+import org.identityconnectors.framework.common.objects.AttributeDelta;
+import org.identityconnectors.framework.common.objects.AttributeDeltaBuilder;
+import org.keycloak.admin.client.resource.IdentityProvidersResource;
+import org.keycloak.admin.client.resource.RealmResource;
+import org.keycloak.representations.idm.IdentityProviderRepresentation;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
 import org.keycloak.admin.client.resource.UserResource;
@@ -89,5 +95,92 @@ class FederatedIdentityOpsTest {
         assertThrows(AlreadyExistsException.class, () -> FederatedIdentityOps.apply(user,
                 new FederatedIdentityOps.Plan(List.of(), List.of(wanted), Map.of())));
         verify(user, times(1)).addFederatedIdentity(eq("idp-1"), any());
+    }
+
+    @Test
+    void restoresOnServerError() {
+        UserResource user = mock(UserResource.class);
+        FederatedIdentityRepresentation old = link("idp-1", "old");
+        FederatedIdentityRepresentation wanted = link("idp-1", "x");
+        when(user.addFederatedIdentity(eq("idp-1"), same(wanted))).thenReturn(Response.status(500).build());
+        when(user.addFederatedIdentity(eq("idp-1"), same(old))).thenReturn(Response.noContent().build());
+
+        assertThrows(ConnectorException.class, () -> FederatedIdentityOps.apply(user, replacePlan(old, wanted)));
+        verify(user).addFederatedIdentity(eq("idp-1"), same(old));
+    }
+
+    @Test
+    void restoresWhenAddThrows() {
+        UserResource user = mock(UserResource.class);
+        FederatedIdentityRepresentation old = link("idp-1", "old");
+        FederatedIdentityRepresentation wanted = link("idp-1", "x");
+        RuntimeException boom = new IllegalStateException("network");
+        when(user.addFederatedIdentity(eq("idp-1"), same(wanted))).thenThrow(boom);
+        when(user.addFederatedIdentity(eq("idp-1"), same(old))).thenReturn(Response.noContent().build());
+
+        RuntimeException thrown = assertThrows(RuntimeException.class,
+                () -> FederatedIdentityOps.apply(user, replacePlan(old, wanted)));
+        assertSame(boom, thrown);
+        verify(user).addFederatedIdentity(eq("idp-1"), same(old));
+    }
+
+    private static RealmResource realmWithIdp1() {
+        RealmResource realm = mock(RealmResource.class);
+        IdentityProvidersResource idps = mock(IdentityProvidersResource.class);
+        IdentityProviderRepresentation idp = new IdentityProviderRepresentation();
+        idp.setAlias("idp-1");
+        when(realm.identityProviders()).thenReturn(idps);
+        when(idps.findAll()).thenReturn(List.of(idp));
+        return realm;
+    }
+
+    private static String json(String userId) {
+        return "{\"identityProvider\":\"idp-1\",\"userId\":\"" + userId + "\",\"userName\":\"" + userId + "\"}";
+    }
+
+    @Test
+    void staleRemovalKeepsCurrentLink() {
+        AttributeDelta delta = AttributeDeltaBuilder.build("federatedIdentities", List.of(), List.of(json("old")));
+        FederatedIdentityOps.Plan plan = FederatedIdentityOps.plan(realmWithIdp1(), List.of(link("idp-1", "new")), delta);
+        assertTrue(plan.isEmpty());
+    }
+
+    @Test
+    void removalComparesUserIdCaseSensitively() {
+        AttributeDelta delta = AttributeDeltaBuilder.build("federatedIdentities", List.of(), List.of(json("NEW")));
+        assertTrue(FederatedIdentityOps.plan(realmWithIdp1(), List.of(link("idp-1", "new")), delta).isEmpty());
+    }
+
+    @Test
+    void matchingRemovalUnlinks() {
+        AttributeDelta delta = AttributeDeltaBuilder.build("federatedIdentities", List.of(), List.of(json("new")));
+        FederatedIdentityOps.Plan plan = FederatedIdentityOps.plan(realmWithIdp1(), List.of(link("idp-1", "new")), delta);
+        assertEquals(List.of("idp-1"), plan.remove());
+        assertTrue(plan.add().isEmpty());
+    }
+
+    @Test
+    void duplicateAliasInAddIsRejected() {
+        AttributeDelta delta = AttributeDeltaBuilder.build("federatedIdentities",
+                List.of(json("a"), json("b")), List.of());
+        InvalidAttributeValueException e = assertThrows(InvalidAttributeValueException.class,
+                () -> FederatedIdentityOps.plan(realmWithIdp1(), List.of(), delta));
+        assertTrue(e.getMessage().contains("idp-1"), e.getMessage());
+    }
+
+    @Test
+    void duplicateAliasInReplaceIsRejected() {
+        AttributeDeltaBuilder b = new AttributeDeltaBuilder();
+        b.setName("federatedIdentities");
+        b.addValueToReplace(json("a"));
+        b.addValueToReplace(json("b"));
+        assertThrows(InvalidAttributeValueException.class,
+                () -> FederatedIdentityOps.plan(realmWithIdp1(), List.of(), b.build()));
+    }
+
+    @Test
+    void duplicateAliasInCreateIsRejected() {
+        assertThrows(InvalidAttributeValueException.class,
+                () -> FederatedIdentityOps.parseAndValidate(realmWithIdp1(), List.of(json("a"), json("b"))));
     }
 }
