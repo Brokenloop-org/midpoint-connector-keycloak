@@ -177,7 +177,7 @@ public class KeycloakSchema {
     }
 
     /** Attribute names the connector defines itself on the user object class. */
-    private static final Set<String> USER_RESERVED = Set.of(
+    static final Set<String> USER_RESERVED = Set.of(
             KeycloakUserHandler.ATTR_EMAIL, KeycloakUserHandler.ATTR_EMAIL_VERIFIED,
             KeycloakUserHandler.ATTR_FIRST_NAME, KeycloakUserHandler.ATTR_LAST_NAME,
             KeycloakUserHandler.ATTR_CREATED_TIMESTAMP, KeycloakUserHandler.ATTR_REQUIRED_ACTIONS,
@@ -185,12 +185,12 @@ public class KeycloakSchema {
             KeycloakUserHandler.ATTR_CLIENT_ROLES, KeycloakUserHandler.ATTR_FEDERATED_IDENTITIES);
 
     /** Attribute names the connector defines itself on the group object class. */
-    private static final Set<String> GROUP_RESERVED = Set.of(
+    static final Set<String> GROUP_RESERVED = Set.of(
             KeycloakGroupHandler.ATTR_PATH, KeycloakGroupHandler.ATTR_PARENT_GROUP,
             KeycloakGroupHandler.ATTR_REALM_ROLES, KeycloakGroupHandler.ATTR_CLIENT_ROLES);
 
     /** Drops configured entries whose name is already defined by the connector, so the schema has no duplicates. */
-    private static String[] withoutReserved(String[] entries, Set<String> reserved, String option) {
+    static String[] withoutReserved(String[] entries, Set<String> reserved, String option) {
         List<String> kept = new ArrayList<>();
         for (String entry : entries) {
             String name = entry.contains(":") ? entry.substring(0, entry.indexOf(':')) : entry;
