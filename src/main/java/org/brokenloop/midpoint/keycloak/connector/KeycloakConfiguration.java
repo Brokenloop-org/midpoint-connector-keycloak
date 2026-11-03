@@ -348,7 +348,7 @@ public class KeycloakConfiguration extends AbstractConfiguration {
     }
 
     @ConfigurationProperty(
-            order = 16,
+            order = 21,
             displayMessageKey = "Ignored Roles",
             helpMessageKey = "Role names that are never read, added or removed by role mapping operations. " +
                     "The placeholder {realm} is replaced with the target realm name. " +
@@ -380,7 +380,7 @@ public class KeycloakConfiguration extends AbstractConfiguration {
     }
 
     @ConfigurationProperty(
-            order = 17,
+            order = 22,
             displayMessageKey = "Logout On Disable",
             helpMessageKey = "If yes, all sessions of a user are terminated when the user is disabled. " +
                     "Default is no.",
@@ -395,7 +395,7 @@ public class KeycloakConfiguration extends AbstractConfiguration {
     }
 
     @ConfigurationProperty(
-            order = 18,
+            order = 23,
             displayMessageKey = "Enable User Profile Schema",
             helpMessageKey = "If yes, user attributes declared in the realm's User Profile are added " +
                     "to the user schema. Default is no.",
