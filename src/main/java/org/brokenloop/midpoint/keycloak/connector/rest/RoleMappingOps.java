@@ -108,7 +108,7 @@ public final class RoleMappingOps {
         }
     }
 
-    private static RoleRepresentation resolveRealmRole(RealmResource realm, String name) {
+    static RoleRepresentation resolveRealmRole(RealmResource realm, String name) {
         try {
             return realm.roles().get(name).toRepresentation();
         } catch (NotFoundException e) {
@@ -119,7 +119,7 @@ public final class RoleMappingOps {
     /**
      * Resolves references grouped by client UUID. Unknown values fail when {@code strict}, else are skipped.
      */
-    private static Map<String, List<RoleRepresentation>> resolveClient(RealmResource realm, Set<String> refs,
+    static Map<String, List<RoleRepresentation>> resolveClient(RealmResource realm, Set<String> refs,
                                                                        boolean strict) {
         Map<String, List<RoleRepresentation>> byClient = new LinkedHashMap<>();
         for (String value : new LinkedHashSet<>(refs)) {
