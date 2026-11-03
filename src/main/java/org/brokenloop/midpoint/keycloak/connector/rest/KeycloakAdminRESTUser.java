@@ -15,6 +15,7 @@
  */
 package org.brokenloop.midpoint.keycloak.connector.rest;
 
+import org.brokenloop.midpoint.keycloak.connector.FederatedIdentityCodec;
 import org.brokenloop.midpoint.keycloak.connector.KeycloakClient;
 import org.brokenloop.midpoint.keycloak.connector.KeycloakConfiguration;
 import org.brokenloop.midpoint.keycloak.connector.KeycloakSchema;
@@ -33,6 +34,7 @@ import org.keycloak.admin.client.resource.RoleMappingResource;
 import org.keycloak.admin.client.resource.UserResource;
 import org.keycloak.admin.client.resource.UsersResource;
 import org.keycloak.representations.idm.CredentialRepresentation;
+import org.keycloak.representations.idm.FederatedIdentityRepresentation;
 import org.keycloak.representations.idm.GroupRepresentation;
 import org.keycloak.representations.idm.UserRepresentation;
 
@@ -82,8 +84,11 @@ public class KeycloakAdminRESTUser implements KeycloakClient.User {
         Set<String> addRealmRoles = new LinkedHashSet<>();
         Set<String> addClientRoles = new LinkedHashSet<>();
         Set<Attribute> userAttributes = new HashSet<>();
+        Attribute federatedIdentities = null;
         for (Attribute attr : createAttributes) {
-            if (attr.getName().equals(ATTR_REALM_ROLES) || attr.getName().equals(ATTR_CLIENT_ROLES)) {
+            if (attr.getName().equals(ATTR_FEDERATED_IDENTITIES)) {
+                federatedIdentities = attr;
+            } else if (attr.getName().equals(ATTR_REALM_ROLES) || attr.getName().equals(ATTR_CLIENT_ROLES)) {
                 Set<String> target = attr.getName().equals(ATTR_REALM_ROLES) ? addRealmRoles : addClientRoles;
                 if (attr.getValue() != null) {
                     attr.getValue().stream().filter(Objects::nonNull).map(Object::toString).forEach(target::add);
@@ -92,6 +97,10 @@ public class KeycloakAdminRESTUser implements KeycloakClient.User {
                 userAttributes.add(attr);
             }
         }
+
+        // Validate the links before creating the user so a bad link does not leave a half-created user behind.
+        List<FederatedIdentityRepresentation> addLinks = FederatedIdentityOps.parseAndValidate(
+                realm(realmName), federatedIdentities == null ? null : federatedIdentities.getValue());
 
         UserRepresentation newUser = toUserRep(schema, userAttributes);
 
@@ -142,6 +151,10 @@ public class KeycloakAdminRESTUser implements KeycloakClient.User {
                     new RoleDiff(RoleMappings.withoutIgnored(addRealmRoles, ignoredRoles), Set.of()));
             RoleMappingOps.applyClient(realm, rm,
                     new RoleDiff(RoleMappings.withoutIgnored(addClientRoles, ignoredRoles), Set.of()));
+        }
+
+        if (!addLinks.isEmpty()) {
+            FederatedIdentityOps.add(users(realmName).get(uuid), addLinks);
         }
 
         return new Uid(uuid, new Name(newUser.getUsername()));
@@ -237,6 +250,8 @@ public class KeycloakAdminRESTUser implements KeycloakClient.User {
         CredentialRepresentation credential = null;
         AttributeDelta realmRolesDelta = null;
         AttributeDelta clientRolesDelta = null;
+        AttributeDelta federatedIdentitiesDelta = null;
+        FederatedIdentityOps.Plan linkPlan = null;
         boolean userAttributeChanged = false;
 
         try {
@@ -304,6 +319,9 @@ public class KeycloakAdminRESTUser implements KeycloakClient.User {
                 } else if (delta.getName().equals(ATTR_CLIENT_ROLES)) {
                     clientRolesDelta = delta;
 
+                } else if (delta.getName().equals(ATTR_FEDERATED_IDENTITIES)) {
+                    federatedIdentitiesDelta = delta;
+
                 } else if (schema.isUserSchema(delta)) {
                     userAttributeChanged = true;
                     if (schema.isMultiValuedUserSchema(delta)) {
@@ -348,6 +366,12 @@ public class KeycloakAdminRESTUser implements KeycloakClient.User {
                 credential = credentials.get(0);
             }
             current.setCredentials(null);
+
+            if (federatedIdentitiesDelta != null) {
+                // Validate and plan before any write so a bad link fails the whole update.
+                linkPlan = FederatedIdentityOps.plan(realm(realmName), FederatedIdentityOps.read(user),
+                        federatedIdentitiesDelta);
+            }
 
             if (userAttributeChanged) {
                 user.update(current);
@@ -394,6 +418,10 @@ public class KeycloakAdminRESTUser implements KeycloakClient.User {
                 RoleMappingOps.applyClient(realm, rm,
                         RoleMappings.diff(RoleMappingOps.readClient(rm, ignoredRoles), clientRolesDelta, ignoredRoles));
             }
+        }
+
+        if (linkPlan != null && !linkPlan.isEmpty()) {
+            FederatedIdentityOps.apply(users(realmName).get(current.getId()), linkPlan);
         }
     }
 
@@ -570,6 +598,7 @@ public class KeycloakAdminRESTUser implements KeycloakClient.User {
         }
 
         addRoleMappings(builder, realmName, user, attributesToGet, allowPartialAttributeValues);
+        addFederatedIdentities(builder, realmName, user, attributesToGet, allowPartialAttributeValues);
 
         return builder.build();
     }
@@ -591,6 +620,21 @@ public class KeycloakAdminRESTUser implements KeycloakClient.User {
                         : RoleMappingOps.readClient(rm, ignoredRoles);
                 builder.addAttribute(attrName, new ArrayList<>(values));
             }
+        }
+    }
+
+    private void addFederatedIdentities(ConnectorObjectBuilder builder, String realmName, UserRepresentation user,
+                                        Set<String> attributesToGet, boolean allowPartialAttributeValues) {
+        if (allowPartialAttributeValues) {
+            AttributeBuilder ab = new AttributeBuilder();
+            ab.setName(ATTR_FEDERATED_IDENTITIES).setAttributeValueCompleteness(AttributeValueCompleteness.INCOMPLETE);
+            ab.addValue(Collections.EMPTY_LIST);
+            builder.addAttribute(ab.build());
+
+        } else if (attributesToGet != null && shouldReturn(attributesToGet, ATTR_FEDERATED_IDENTITIES)) {
+            List<String> values = FederatedIdentityOps.read(users(realmName).get(user.getId())).stream()
+                    .map(FederatedIdentityCodec::format).collect(Collectors.toList());
+            builder.addAttribute(ATTR_FEDERATED_IDENTITIES, values);
         }
     }
 }

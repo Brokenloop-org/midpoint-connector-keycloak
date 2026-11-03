@@ -82,7 +82,7 @@ class UserSchemaTest {
     @Test
     void roleMappingAttributesNotReturnedByDefault() {
         ObjectClassInfo schema = KeycloakUserHandler.getUserSchema(new String[]{});
-        for (String name : new String[]{"realmRoles", "clientRoles"}) {
+        for (String name : new String[]{"realmRoles", "clientRoles", "federatedIdentities"}) {
             AttributeInfo info = findAttribute(schema, name).orElseThrow();
             assertEquals(String.class, info.getType());
             assertTrue(info.isMultiValued());

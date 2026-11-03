@@ -61,6 +61,9 @@ public class KeycloakUserHandler extends AbstractKeycloakHandler {
     public static final String ATTR_REALM_ROLES = "realmRoles";
     public static final String ATTR_CLIENT_ROLES = "clientRoles";
 
+    // Federated identity links, each a JSON {"identityProvider":..,"userId":..,"userName":..}
+    public static final String ATTR_FEDERATED_IDENTITIES = "federatedIdentities";
+
     // Password
     public static final String ATTR_PASSWORD = "__PASSWORD__";
     public static final String ATTR_PASSWORD_PERMANENT = "password_permanent";
@@ -78,6 +81,7 @@ public class KeycloakUserHandler extends AbstractKeycloakHandler {
         attrs.add(ATTR_GROUPS);
         attrs.add(ATTR_REALM_ROLES);
         attrs.add(ATTR_CLIENT_ROLES);
+        attrs.add(ATTR_FEDERATED_IDENTITIES);
         attrs.add(ATTR_PASSWORD_PERMANENT);
         attrs.addAll(OperationalAttributes.OPERATIONAL_ATTRIBUTE_NAMES);
 
@@ -193,7 +197,7 @@ public class KeycloakUserHandler extends AbstractKeycloakHandler {
                 .setReturnedByDefault(false)
                 .build());
 
-        for (String roleAttr : new String[]{ATTR_REALM_ROLES, ATTR_CLIENT_ROLES}) {
+        for (String roleAttr : new String[]{ATTR_REALM_ROLES, ATTR_CLIENT_ROLES, ATTR_FEDERATED_IDENTITIES}) {
             builder.addAttributeInfo(AttributeInfoBuilder.define(roleAttr)
                     .setMultiValued(true)
                     .setCreateable(true)
