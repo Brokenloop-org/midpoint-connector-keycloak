@@ -34,6 +34,14 @@ class KeycloakFederatedIdentityIT extends AbstractKeycloakIT {
                     "singleSignOnServiceUrl", "https://idp.example.com/sso",
                     "entityId", "https://idp.example.com/entity")));
             admin.realm(REALM).identityProviders().create(idp).close();
+            IdentityProviderRepresentation idp2 = new IdentityProviderRepresentation();
+            idp2.setAlias("idp-2");
+            idp2.setProviderId("saml");
+            idp2.setEnabled(true);
+            idp2.setConfig(new HashMap<>(Map.of(
+                    "singleSignOnServiceUrl", "https://idp2.example.com/sso",
+                    "entityId", "https://idp2.example.com/entity")));
+            admin.realm(REALM).identityProviders().create(idp2).close();
         }
         connector = newConnector(REALM);
     }
@@ -56,6 +64,16 @@ class KeycloakFederatedIdentityIT extends AbstractKeycloakIT {
 
     private static String json(String userId) {
         return "{\"identityProvider\":\"idp-1\",\"userId\":\"" + userId + "\",\"userName\":\"" + userId + "\"}";
+    }
+
+    private static String json2(String userId) {
+        return "{\"identityProvider\":\"idp-2\",\"userId\":\"" + userId + "\",\"userName\":\"" + userId + "\"}";
+    }
+
+    private Set<String> linkValues(Uid uid) {
+        ConnectorObject o = searchByUidWithAttrs(connector, USER_OBJECT_CLASS, uid, "federatedIdentities");
+        Attribute a = o.getAttributeByName("federatedIdentities");
+        return a == null ? Set.of() : a.getValue().stream().map(String::valueOf).collect(Collectors.toSet());
     }
 
     private Uid createUser(String name, Attribute... extra) {
@@ -223,6 +241,45 @@ class KeycloakFederatedIdentityIT extends AbstractKeycloakIT {
         createUser("bob-holder", AttributeBuilder.build("federatedIdentities", json("X")));
         Uid alice = createUser("alice-case", AttributeBuilder.build("federatedIdentities", json("x")));
         assertEquals("x", links(alice).get(0).getUserId());
+    }
+
+    @Test
+    void linksToTwoProvidersRoundTrip() {
+        Uid uid = createUser("alice-two", AttributeBuilder.build("federatedIdentities",
+                json("a@example.com"), json2("b@example.com")));
+        assertEquals(2, links(uid).size());
+        assertEquals(Set.of(json("a@example.com"), json2("b@example.com")), linkValues(uid));
+    }
+
+    @Test
+    void removeOneProviderKeepsTheOther() {
+        Uid uid = createUser("alice-rm-one", AttributeBuilder.build("federatedIdentities",
+                json("a@example.com"), json2("b@example.com")));
+        update(uid, AttributeDeltaBuilder.build("federatedIdentities", List.of(), List.of(json2("b@example.com"))));
+        assertEquals(Set.of(json("a@example.com")), linkValues(uid));
+    }
+
+    @Test
+    void replaceOnlyOneProvider() {
+        Uid uid = createUser("alice-rep-one", AttributeBuilder.build("federatedIdentities",
+                json("a@example.com"), json2("b@example.com")));
+        AttributeDeltaBuilder b = new AttributeDeltaBuilder();
+        b.setName("federatedIdentities");
+        b.addValueToReplace(json("a@example.com"));
+        b.addValueToReplace(json2("c@example.com"));
+        update(uid, b.build());
+        assertEquals(Set.of(json("a@example.com"), json2("c@example.com")), linkValues(uid));
+    }
+
+    @Test
+    void replaceWithEmptyRemovesAllLinks() {
+        Uid uid = createUser("alice-rep-empty", AttributeBuilder.build("federatedIdentities",
+                json("a@example.com"), json2("b@example.com")));
+        AttributeDeltaBuilder b = new AttributeDeltaBuilder();
+        b.setName("federatedIdentities");
+        b.addValueToReplace((Object[]) new Object[0]);
+        update(uid, b.build());
+        assertTrue(links(uid).isEmpty());
     }
 
     private ConnectorObject searchByNameOrNull(String name) {
