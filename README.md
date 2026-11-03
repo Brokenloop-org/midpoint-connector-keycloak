@@ -86,7 +86,7 @@ Options added in this fork, on top of those inherited from upstream:
 |---|---|---|
 | `ignoredRoles` | `default-roles-{realm}`, `offline_access`, `uma_authorization` | Role names that are never read, added or removed by role-mapping operations. `{realm}` is replaced with the target realm name. |
 | `logoutOnDisable` | `false` | When `true`, all sessions of a user are terminated when the user is disabled. |
-| `userProfileSchemaEnabled` | `false` | When `true`, user attributes declared in the realm's User Profile are added to the `user` schema. Explicitly configured user attributes that are missing from the User Profile are reported with a warning. |
+| `userProfileSchemaEnabled` | `false` | When `true`, user attributes declared in the realm's User Profile are added to the `user` schema. Explicitly configured user attributes that are missing from the User Profile are reported with a warning. If the User Profile cannot be read, an error is logged and the connector's `test` operation fails; the service account needs `query-users` (granted by `view-users` or `manage-users`) or `view-realm`. |
 
 The Keycloak REST client uses a lenient JSON mapper: properties returned by the server
 that the admin client does not know about are ignored instead of failing the request.
