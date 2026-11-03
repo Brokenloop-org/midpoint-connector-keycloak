@@ -134,6 +134,10 @@ public class KeycloakSchema {
     }
 
     private void parseVersion() {
+        if ("unknown".equals(version)) {
+            // Realm-scoped service accounts cannot read the server version.
+            return;
+        }
         try {
             String[] s = version.split("\\.");
             this.majorVersion = Integer.parseInt(s[0]);

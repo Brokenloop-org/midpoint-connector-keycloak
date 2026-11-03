@@ -78,6 +78,8 @@ Semantics:
   without writing anything, because Keycloak does not enforce this and a shared identity
   breaks broker login for both users ([keycloak/keycloak#29317](https://github.com/keycloak/keycloak/issues/29317)).
 
+Service accounts that belong to the target realm itself (rather than `master`) are supported; they need the `realm-management` roles `query-users`, `view-users` and `manage-users` (`view-realm` is not required). The server version is then reported as `unknown`.
+
 ## Configuration
 
 Options added in this fork, on top of those inherited from upstream:
