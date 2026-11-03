@@ -150,7 +150,8 @@ public class KeycloakAdminRESTAdminClient implements KeycloakClient {
     public void test(String realmName) {
         try {
             Boolean enabled = adminClient.realm(realmName).toRepresentation().isEnabled();
-            if (!Boolean.TRUE.equals(enabled)) {
+            // Without view-realm the server leaves "enabled" out; only an explicit false means inactive.
+            if (Boolean.FALSE.equals(enabled)) {
                 throw new ConnectorException("The keycloak realm isn't active.");
             }
         } catch (ProcessingException e) {
@@ -166,15 +167,29 @@ public class KeycloakAdminRESTAdminClient implements KeycloakClient {
 
     @Override
     public String getVersion() {
-        ServerInfoRepresentation info = adminClient.serverInfo().getInfo();
+        return versionOf(adminClient.serverInfo().getInfo());
+    }
+
+    /** A service account of the target realm gets no systemInfo, so the version is then unknown. */
+    static String versionOf(ServerInfoRepresentation info) {
+        if (info == null || info.getSystemInfo() == null || info.getSystemInfo().getVersion() == null) {
+            return "unknown";
+        }
         return info.getSystemInfo().getVersion();
     }
 
     @Override
     public boolean isFeatureEnabled(String featureName) {
-        ServerInfoRepresentation info = adminClient.serverInfo().getInfo();
-        if (info.getFeatures() == null) {
-            return false;
+        return featureEnabled(adminClient.serverInfo().getInfo(), featureName);
+    }
+
+    /**
+     * Without a feature list (realm-scoped service accounts) nothing is known, so the feature is not reported
+     * as off; callers then rely on the realm's own flag.
+     */
+    static boolean featureEnabled(ServerInfoRepresentation info, String featureName) {
+        if (info == null || info.getFeatures() == null) {
+            return true;
         }
         return info.getFeatures().stream()
                 .anyMatch(f -> featureName.equalsIgnoreCase(f.getName()) && f.isEnabled());
