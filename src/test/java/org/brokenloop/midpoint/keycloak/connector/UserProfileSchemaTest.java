@@ -69,4 +69,23 @@ class UserProfileSchemaTest {
         String[] explicit = {"a", "b:multivalued"};
         assertArrayEquals(explicit, UserProfileSchema.merge(explicit, null));
     }
+
+    @Test
+    void warnsWhenExplicitAttributeMissingFromProfileAndPolicyNull() {
+        UPConfig p = profile(attr("dept", false));
+        assertTrue(UserProfileSchema.warnsAboutUnmanagedWrites(new String[]{"dept", "extra"}, p));
+    }
+
+    @Test
+    void noWarningWhenEveryExplicitAttributeIsDeclared() {
+        UPConfig p = profile(attr("dept", false), attr("tags", true));
+        assertFalse(UserProfileSchema.warnsAboutUnmanagedWrites(new String[]{"dept", "tags:multivalued"}, p));
+    }
+
+    @Test
+    void noWarningWhenUnmanagedPolicySet() {
+        UPConfig p = profile(attr("dept", false));
+        p.setUnmanagedAttributePolicy(UPConfig.UnmanagedAttributePolicy.ENABLED);
+        assertFalse(UserProfileSchema.warnsAboutUnmanagedWrites(new String[]{"extra"}, p));
+    }
 }

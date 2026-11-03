@@ -54,14 +54,14 @@ final class UserProfileSchema {
             }
         }
 
-        List<String> explicitNotInProfile = new ArrayList<>();
+        List<String> explicitEntries = new ArrayList<>();
         for (String entry : explicitUserAttributes) {
             String name = entry.contains(":") ? entry.substring(0, entry.indexOf(':')) : entry;
             boolean multivalued = entry.contains(":")
                     && entry.substring(entry.indexOf(':') + 1).equalsIgnoreCase(MULTIVALUED);
             Boolean fromProfile = merged.remove(name);
+            explicitEntries.add(entry);
             if (fromProfile == null) {
-                explicitNotInProfile.add(entry);
                 continue;
             }
             if (fromProfile != multivalued) {
@@ -69,10 +69,9 @@ final class UserProfileSchema {
                                 "the explicit configuration wins",
                         name, multiplicity(multivalued), multiplicity(fromProfile));
             }
-            explicitNotInProfile.add(entry);
         }
 
-        if (!explicitNotInProfile.isEmpty() && profile.getUnmanagedAttributePolicy() == null) {
+        if (warnsAboutUnmanagedWrites(explicitUserAttributes, profile)) {
             LOGGER.warn("Unmanaged user attributes are disabled in the realm user profile; writes to explicitly " +
                     "configured attributes that are not declared in the profile will be rejected or dropped");
         }
@@ -81,8 +80,25 @@ final class UserProfileSchema {
         for (Map.Entry<String, Boolean> e : merged.entrySet()) {
             result.add(e.getValue() ? e.getKey() + ":" + MULTIVALUED : e.getKey());
         }
-        result.addAll(explicitNotInProfile);
+        result.addAll(explicitEntries);
         return result.toArray(new String[0]);
+    }
+
+    /**
+     * True when unmanaged attributes are disabled in the profile and at least one explicit attribute
+     * is not declared in it, i.e. writes to that attribute will be rejected or dropped.
+     */
+    static boolean warnsAboutUnmanagedWrites(String[] explicitUserAttributes, UPConfig profile) {
+        if (profile == null || profile.getUnmanagedAttributePolicy() != null) {
+            return false;
+        }
+        for (String entry : explicitUserAttributes) {
+            String name = entry.contains(":") ? entry.substring(0, entry.indexOf(':')) : entry;
+            if (profile.getAttribute(name) == null) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static boolean isCoreProfileAttribute(String name) {
