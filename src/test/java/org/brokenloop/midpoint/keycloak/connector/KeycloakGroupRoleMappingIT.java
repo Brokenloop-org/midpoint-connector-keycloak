@@ -156,4 +156,37 @@ class KeycloakGroupRoleMappingIT extends AbstractKeycloakIT {
         assertNotNull(searchByName(connector, GROUP_OBJECT_CLASS, "group-nowrite"));
         assertNull(searchByName(connector, GROUP_OBJECT_CLASS, "group-renamed"));
     }
+
+    @Test
+    void unknownClientRoleOnCreateLeavesNoGroupBehind() {
+        assertThrows(InvalidAttributeValueException.class,
+                () -> createGroup("group-halfway-client",
+                        AttributeBuilder.build("clientRoles", app1Uuid + "/nope")));
+        assertNull(searchByName(connector, GROUP_OBJECT_CLASS, "group-halfway-client"));
+    }
+
+    @Test
+    void ignoredRolesAreNotTouchedByWrites() {
+        Uid uid = createGroup("group-ignored");
+        try (Keycloak admin = adminClient()) {
+            var realmLevel = admin.realm(REALM).groups().group(uid.getUidValue()).roles().realmLevel();
+            realmLevel.add(List.of(admin.realm(REALM).roles().get("uma_authorization").toRepresentation()));
+        }
+
+        // adding an ignored role is a no-op, removing one leaves it in place
+        update(uid, AttributeDeltaBuilder.build("realmRoles", List.of("offline_access"), List.of("uma_authorization")));
+        assertEquals(Set.of("uma_authorization"), directRealm(uid));
+
+        // replace with an empty list removes everything except ignored roles
+        AttributeDeltaBuilder b = new AttributeDeltaBuilder();
+        b.setName("realmRoles");
+        b.addValueToReplace("role-a");
+        update(uid, b.build());
+        assertEquals(Set.of("role-a", "uma_authorization"), directRealm(uid));
+        AttributeDeltaBuilder empty = new AttributeDeltaBuilder();
+        empty.setName("realmRoles");
+        empty.addValueToReplace();
+        update(uid, empty.build());
+        assertEquals(Set.of("uma_authorization"), directRealm(uid));
+    }
 }

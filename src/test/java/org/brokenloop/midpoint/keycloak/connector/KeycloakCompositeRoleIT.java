@@ -171,4 +171,60 @@ class KeycloakCompositeRoleIT extends AbstractKeycloakIT {
                 () -> update(REALM_ROLE_OBJECT_CLASS, uid,
                         AttributeDeltaBuilder.build("compositeRealmRoles", List.of("nope"), List.of())));
     }
+
+    @Test
+    void realmRoleRenameCombinedWithCompositeChange() {
+        Uid uid = createRealmRole("rename-realm", AttributeBuilder.build("compositeRealmRoles", "role-a"));
+        update(REALM_ROLE_OBJECT_CLASS, uid,
+                AttributeDeltaBuilder.build("__NAME__", "renamed-realm"),
+                AttributeDeltaBuilder.build("compositeRealmRoles", List.of("role-b"), List.of("role-a")),
+                AttributeDeltaBuilder.build("compositeClientRoles", List.of(app1Uuid + "/cr-1"), List.of()));
+        assertNull(searchByName(connector, REALM_ROLE_OBJECT_CLASS, "rename-realm"));
+        ConnectorObject o = searchByUidWithAttrs(connector, REALM_ROLE_OBJECT_CLASS, uid,
+                "compositeRealmRoles", "compositeClientRoles");
+        assertEquals("renamed-realm", o.getName().getNameValue());
+        assertEquals(Set.of("role-b"), values(o, "compositeRealmRoles"));
+        assertEquals(Set.of(app1Uuid + "/cr-1"), values(o, "compositeClientRoles"));
+    }
+
+    @Test
+    void clientRoleRenameCombinedWithCompositeChange() {
+        Uid uid = createClientRole("rename-client", AttributeBuilder.build("compositeRealmRoles", "role-a"));
+        update(CLIENT_ROLE_OBJECT_CLASS, uid,
+                AttributeDeltaBuilder.build("__NAME__", app1Uuid + "/renamed-client"),
+                AttributeDeltaBuilder.build("compositeRealmRoles", List.of("role-b"), List.of("role-a")),
+                AttributeDeltaBuilder.build("compositeClientRoles", List.of(app1Uuid + "/cr-2"), List.of()));
+        assertNull(searchByName(connector, CLIENT_ROLE_OBJECT_CLASS, app1Uuid + "/rename-client"));
+        ConnectorObject o = searchByUidWithAttrs(connector, CLIENT_ROLE_OBJECT_CLASS, uid,
+                "compositeRealmRoles", "compositeClientRoles");
+        assertEquals(app1Uuid + "/renamed-client", o.getName().getNameValue());
+        assertEquals(Set.of("role-b"), values(o, "compositeRealmRoles"));
+        assertEquals(Set.of(app1Uuid + "/cr-2"), values(o, "compositeClientRoles"));
+    }
+
+    @Test
+    void clientRoleCompositesAddRemoveAndReplace() {
+        Uid uid = createClientRole("parent-cc",
+                AttributeBuilder.build("compositeRealmRoles", "role-a"),
+                AttributeBuilder.build("compositeClientRoles", app1Uuid + "/cr-1"));
+
+        update(CLIENT_ROLE_OBJECT_CLASS, uid,
+                AttributeDeltaBuilder.build("compositeRealmRoles", List.of("role-b"), List.of("role-a")),
+                AttributeDeltaBuilder.build("compositeClientRoles", List.of(app1Uuid + "/cr-2"),
+                        List.of(app1Uuid + "/cr-1")));
+        ConnectorObject o = read(CLIENT_ROLE_OBJECT_CLASS, uid);
+        assertEquals(Set.of("role-b"), values(o, "compositeRealmRoles"));
+        assertEquals(Set.of(app1Uuid + "/cr-2"), values(o, "compositeClientRoles"));
+
+        AttributeDeltaBuilder realm = new AttributeDeltaBuilder();
+        realm.setName("compositeRealmRoles");
+        realm.addValueToReplace("role-c");
+        AttributeDeltaBuilder client = new AttributeDeltaBuilder();
+        client.setName("compositeClientRoles");
+        client.addValueToReplace(app1Uuid + "/cr-1");
+        update(CLIENT_ROLE_OBJECT_CLASS, uid, realm.build(), client.build());
+        o = read(CLIENT_ROLE_OBJECT_CLASS, uid);
+        assertEquals(Set.of("role-c"), values(o, "compositeRealmRoles"));
+        assertEquals(Set.of(app1Uuid + "/cr-1"), values(o, "compositeClientRoles"));
+    }
 }

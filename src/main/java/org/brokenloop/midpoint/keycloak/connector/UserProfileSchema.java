@@ -71,19 +71,15 @@ final class UserProfileSchema {
 
         List<String> explicitEntries = new ArrayList<>();
         for (String entry : explicitUserAttributes) {
-            String name = entry.contains(":") ? entry.substring(0, entry.indexOf(':')) : entry;
-            boolean multivalued = entry.contains(":")
-                    && entry.substring(entry.indexOf(':') + 1).equalsIgnoreCase(MULTIVALUED);
-            Boolean fromProfile = merged.remove(name);
+            String name = entryName(entry);
+            merged.remove(name);
             explicitEntries.add(entry);
-            if (fromProfile == null) {
-                continue;
-            }
-            if (fromProfile != multivalued) {
-                LOGGER.warn("User attribute \"{0}\" is configured as {1} but the user profile declares it as {2}; " +
-                                "the explicit configuration wins",
-                        name, multiplicity(multivalued), multiplicity(fromProfile));
-            }
+        }
+        for (String name : multiplicityConflicts(explicitUserAttributes, profile)) {
+            boolean explicitMulti = isMultivalued(findEntry(explicitUserAttributes, name));
+            LOGGER.warn("User attribute \"{0}\" is configured as {1} but the user profile declares it as {2}; " +
+                            "the explicit configuration wins",
+                    name, multiplicity(explicitMulti), multiplicity(!explicitMulti));
         }
 
         if (warnsAboutUnmanagedWrites(explicitUserAttributes, profile)) {
@@ -114,6 +110,45 @@ final class UserProfileSchema {
             }
         }
         return false;
+    }
+
+    /**
+     * Names of explicitly configured attributes whose multiplicity differs from the profile's declaration
+     * (the explicit configuration wins). Built-in connector attributes are never reported.
+     */
+    static List<String> multiplicityConflicts(String[] explicitUserAttributes, UPConfig profile) {
+        List<String> conflicts = new ArrayList<>();
+        if (profile == null || profile.getAttributes() == null) {
+            return conflicts;
+        }
+        for (String entry : explicitUserAttributes) {
+            String name = entryName(entry);
+            if (BUILT_IN.contains(name)) {
+                continue;
+            }
+            UPAttribute declared = profile.getAttribute(name);
+            if (declared != null && declared.isMultivalued() != isMultivalued(entry)) {
+                conflicts.add(name);
+            }
+        }
+        return conflicts;
+    }
+
+    private static String entryName(String entry) {
+        return entry.contains(":") ? entry.substring(0, entry.indexOf(':')) : entry;
+    }
+
+    private static boolean isMultivalued(String entry) {
+        return entry.contains(":") && entry.substring(entry.indexOf(':') + 1).equalsIgnoreCase(MULTIVALUED);
+    }
+
+    private static String findEntry(String[] entries, String name) {
+        for (String entry : entries) {
+            if (entryName(entry).equals(name)) {
+                return entry;
+            }
+        }
+        return name;
     }
 
     private static boolean isCoreProfileAttribute(String name) {

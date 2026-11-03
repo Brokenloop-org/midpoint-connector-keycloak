@@ -77,4 +77,28 @@ class RoleMappingDiffTest {
         assertThrows(InvalidAttributeValueException.class, () -> ClientRoleRef.parse("x"));
         assertThrows(InvalidAttributeValueException.class, () -> ClientRoleRef.parse("a/b/c"));
     }
+
+    @Test
+    void addAndRemoveInOneDelta() {
+        RoleDiff d = RoleMappings.diff(Set.of("a", "b"), addRemove(Set.of("c"), Set.of("a")), Set.of());
+        assertEquals(Set.of("c"), d.toAdd());
+        assertEquals(Set.of("a"), d.toRemove());
+    }
+
+    @Test
+    void replaceWithEmptyRemovesEverythingExceptIgnored() {
+        AttributeDeltaBuilder b = new AttributeDeltaBuilder();
+        b.setName("roles");
+        b.addValueToReplace();
+        RoleDiff d = RoleMappings.diff(Set.of("a", "b", "offline_access"), b.build(), Set.of("offline_access"));
+        assertEquals(Set.of(), d.toAdd());
+        assertEquals(Set.of("a", "b"), d.toRemove());
+    }
+
+    @Test
+    void removingAnIgnoredRoleIsDropped() {
+        RoleDiff d = RoleMappings.diff(Set.of("a", "offline_access"), addRemove(null, Set.of("offline_access")),
+                Set.of("offline_access"));
+        assertTrue(d.toRemove().isEmpty());
+    }
 }

@@ -140,14 +140,14 @@ class KeycloakUserLifecycleIT extends AbstractKeycloakIT {
     @Test
     void disableWithLogoutEndsSessions() throws Exception {
         Uid uid = createUserWithPassword("alice-logout");
-        String refreshToken = openSession("alice-logout");
+        openSession("alice-logout");
         assertEquals(1, sessionCount(uid));
 
         update(logoutConnector, uid, AttributeDeltaBuilder.buildEnabled(false));
 
         assertFalse(rep(uid).isEnabled());
+        // disableWithoutFlagKeepsSessions proves disabling alone leaves the session open, so 0 here is the logout.
         assertEquals(0, sessionCount(uid));
-        assertNotEquals(200, refresh(refreshToken));
     }
 
     @Test

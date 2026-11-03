@@ -190,4 +190,20 @@ class KeycloakUserRoleMappingIT extends AbstractKeycloakIT {
         ConnectorObject o = searchByUid(connector, USER_OBJECT_CLASS, uid);
         assertEquals(Boolean.TRUE, o.getAttributeByName(OperationalAttributes.ENABLE_NAME).getValue().get(0));
     }
+
+    @Test
+    void ignoredRolesAreNotTouchedByWrites() {
+        Uid uid = createUser("alice-ignored");
+        String defaultRole = "default-roles-" + REALM;
+        assertTrue(directRealm(uid).contains(defaultRole));
+
+        update(uid, AttributeDeltaBuilder.build("realmRoles", List.of("offline_access"), List.of(defaultRole)));
+        assertEquals(Set.of(defaultRole), directRealm(uid));
+
+        AttributeDeltaBuilder empty = new AttributeDeltaBuilder();
+        empty.setName("realmRoles");
+        empty.addValueToReplace();
+        update(uid, empty.build());
+        assertEquals(Set.of(defaultRole), directRealm(uid));
+    }
 }
