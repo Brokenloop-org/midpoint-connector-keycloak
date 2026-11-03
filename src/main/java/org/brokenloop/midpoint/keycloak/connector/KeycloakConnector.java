@@ -50,7 +50,8 @@ public class KeycloakConnector implements PoolableConnector, CreateOp, UpdateDel
     protected KeycloakConfiguration configuration;
     protected KeycloakClient client;
 
-    private KeycloakSchema schema;
+    /** Swapped atomically by schema(); operations read it once per call. */
+    private volatile KeycloakSchema schema;
     private String instanceName;
 
     @Override
@@ -86,8 +87,10 @@ public class KeycloakConnector implements PoolableConnector, CreateOp, UpdateDel
     @Override
     public Schema schema() {
         try {
-            schema = new KeycloakSchema(configuration, client);
-            return schema.schema;
+            // Build completely first: a failed rebuild leaves the previous schema in place.
+            KeycloakSchema rebuilt = new KeycloakSchema(configuration, client);
+            schema = rebuilt;
+            return rebuilt.schema;
 
         } catch (RuntimeException e) {
             throw processRuntimeException(e);
@@ -96,16 +99,21 @@ public class KeycloakConnector implements PoolableConnector, CreateOp, UpdateDel
 
     private KeycloakSchema getSchema() {
         // Load schema map if it's not loaded yet
-        if (schema == null) {
+        KeycloakSchema current = schema;
+        if (current == null) {
             schema();
+            current = schema;
         }
-        return schema;
+        return current;
     }
 
     protected AbstractKeycloakHandler createKeycloakHandler(ObjectClass objectClass) {
         if (objectClass == null) {
             throw new InvalidAttributeValueException("ObjectClass value not provided");
         }
+
+        // One snapshot per operation, so a concurrent schema() refresh cannot split a handler across two schemas.
+        final KeycloakSchema schema = getSchema();
 
         if (objectClass.equals(USER_OBJECT_CLASS)) {
             return new KeycloakUserHandler(instanceName, configuration, client, schema);

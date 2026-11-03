@@ -129,4 +129,34 @@ class KeycloakUserProfileIT extends AbstractKeycloakIT {
             setProfile(null);
         }
     }
+
+    @Test
+    void profileAttributeAddedAfterInitAppearsAfterSchemaRefresh() {
+        setProfile(null);
+        KeycloakConnector c = connector(true, null);
+        try (Keycloak admin = adminClient()) {
+            assertNull(AttributeInfoUtil.find("badge", userClass(c).getAttributeInfo()));
+
+            var users = admin.realm(REALM).users();
+            UPConfig config = users.userProfile().getConfiguration();
+            config.addOrReplaceAttribute(new UPAttribute("badge",
+                    new UPAttributePermissions(Set.of("admin"), Set.of("admin"))));
+            users.userProfile().update(config);
+
+            // still the cached schema: the profile is not re-read per operation
+            assertNull(c.createKeycloakHandler(USER_OBJECT_CLASS).schema.getUserSchema("badge"));
+
+            assertNotNull(AttributeInfoUtil.find("badge", userClass(c).getAttributeInfo()));
+
+            Set<Attribute> attrs = new HashSet<>();
+            attrs.add(new Name("alice-badge"));
+            attrs.add(AttributeBuilder.build("badge", "b-1"));
+            Uid uid = c.create(USER_OBJECT_CLASS, attrs, null);
+            ConnectorObject o = searchByUid(c, USER_OBJECT_CLASS, uid);
+            assertEquals(List.of("b-1"), o.getAttributeByName("badge").getValue());
+        } finally {
+            c.dispose();
+            setProfile(null);
+        }
+    }
 }
