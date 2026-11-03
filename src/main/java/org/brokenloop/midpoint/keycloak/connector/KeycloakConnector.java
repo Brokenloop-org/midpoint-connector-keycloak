@@ -209,8 +209,26 @@ public class KeycloakConnector implements PoolableConnector, CreateOp, UpdateDel
             dispose();
             initClient();
             client.test(configuration.getTargetRealmName());
+            checkUserProfileReadable();
         } catch (RuntimeException e) {
             throw processRuntimeException(e);
+        }
+    }
+
+    /** With the profile schema enabled, an unreadable User Profile must not pass as a healthy resource. */
+    private void checkUserProfileReadable() {
+        if (!configuration.isUserProfileSchemaEnabled()) {
+            return;
+        }
+        String realmName = configuration.getTargetRealmName();
+        try {
+            client.getUserProfileConfig(realmName);
+        } catch (RuntimeException e) {
+            throw new ConnectorException(String.format(
+                    "The user profile of realm '%s' could not be read although userProfileSchemaEnabled is true. "
+                            + "The service account likely lacks a realm-management role: query-users (granted by "
+                            + "view-users or manage-users) or view-realm is needed to read GET /admin/realms/%s/users/profile. "
+                            + "Cause: %s", realmName, realmName, e.getMessage()), e);
         }
     }
 

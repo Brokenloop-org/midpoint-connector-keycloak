@@ -160,7 +160,9 @@ public class KeycloakSchema {
         try {
             profile = client.getUserProfileConfig(configuration.getTargetRealmName());
         } catch (RuntimeException e) {
-            LOG.warn("Failed to read the user profile of realm {0}; using the configured user attributes only: {1}",
+            LOG.error("Failed to read the user profile of realm {0} although userProfileSchemaEnabled is true; "
+                    + "using the configured user attributes only. The service account probably lacks a "
+                    + "realm-management role such as query-users or view-users: {1}",
                     configuration.getTargetRealmName(), e.getMessage());
         }
         return UserProfileSchema.merge(explicit, profile);
