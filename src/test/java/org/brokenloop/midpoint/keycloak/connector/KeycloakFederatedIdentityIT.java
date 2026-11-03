@@ -134,6 +134,36 @@ class KeycloakFederatedIdentityIT extends AbstractKeycloakIT {
                 () -> update(uid, AttributeDeltaBuilder.build("federatedIdentities", List.of(bad), List.of())));
     }
 
+    private static String json(String idp, String userId) {
+        return "{\"identityProvider\":\"" + idp + "\",\"userId\":\"" + userId + "\",\"userName\":\"" + userId + "\"}";
+    }
+
+    @Test
+    void removeStaleValueKeepsCurrentLink() {
+        Uid uid = createUser("alice-stale", AttributeBuilder.build("federatedIdentities", json("new")));
+        update(uid, AttributeDeltaBuilder.build("federatedIdentities", List.of(), List.of(json("old"))));
+        List<FederatedIdentityRepresentation> l = links(uid);
+        assertEquals(1, l.size());
+        assertEquals("new", l.get(0).getUserId());
+    }
+
+    @Test
+    void duplicateAliasOnCreateRejected() {
+        assertThrows(InvalidAttributeValueException.class, () -> createUser("alice-dup-create",
+                AttributeBuilder.build("federatedIdentities", json("a"), json("b"))));
+        assertNull(searchByNameOrNull("alice-dup-create"));
+    }
+
+    @Test
+    void duplicateAliasOnUpdateRejected() {
+        Uid uid = createUser("alice-dup-update", AttributeBuilder.build("federatedIdentities", json("keep")));
+        assertThrows(InvalidAttributeValueException.class, () -> update(uid,
+                AttributeDeltaBuilder.build("federatedIdentities", List.of(json("a"), json("b")), List.of())));
+        List<FederatedIdentityRepresentation> l = links(uid);
+        assertEquals(1, l.size());
+        assertEquals("keep", l.get(0).getUserId());
+    }
+
     private ConnectorObject searchByNameOrNull(String name) {
         List<ConnectorObject> all = searchAll(connector, USER_OBJECT_CLASS);
         return all.stream().filter(o -> name.equals(o.getName().getNameValue())).findFirst().orElse(null);

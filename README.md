@@ -68,6 +68,11 @@ Semantics:
 - Roles listed in `ignoredRoles` (see below) are never read, added or removed by user and
   group role mappings. The list does not apply to composites. For client roles an entry
   matches only the full `<clientUUID>/<roleName>` value.
+- Removing a `federatedIdentities` value unlinks the identity provider only if the user's
+  current link for that alias has the same `userId` (compared case-sensitively); a stale
+  removal is ignored with a warning.
+- A single create, add or replace must not contain two `federatedIdentities` values with
+  the same `identityProvider`; such a request is rejected before anything is written.
 
 ## Configuration
 

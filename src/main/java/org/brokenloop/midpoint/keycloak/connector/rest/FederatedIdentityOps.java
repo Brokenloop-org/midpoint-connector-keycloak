@@ -72,6 +72,12 @@ final class FederatedIdentityOps {
                 throw new InvalidAttributeValueException(
                         "Unknown identity provider alias '" + rep.getIdentityProvider() + "'");
             }
+            for (FederatedIdentityRepresentation seen : reps) {
+                if (seen.getIdentityProvider().equals(rep.getIdentityProvider())) {
+                    throw new InvalidAttributeValueException("Several federated identities for identity provider '"
+                            + rep.getIdentityProvider() + "'; a user can have one link per identity provider");
+                }
+            }
             reps.add(rep);
         }
         return reps;
@@ -93,14 +99,25 @@ final class FederatedIdentityOps {
             for (FederatedIdentityRepresentation r : current) {
                 target.put(r.getIdentityProvider(), r);
             }
+            // Validate the additions before looking at removals so that nothing is written on bad input.
+            List<FederatedIdentityRepresentation> additions = parseAndValidate(realm, delta.getValuesToAdd());
             if (delta.getValuesToRemove() != null) {
                 for (Object v : delta.getValuesToRemove()) {
-                    if (v != null) {
-                        target.remove(FederatedIdentityCodec.parse(v.toString()).getIdentityProvider());
+                    if (v == null) {
+                        continue;
+                    }
+                    FederatedIdentityRepresentation r = FederatedIdentityCodec.parse(v.toString());
+                    FederatedIdentityRepresentation now = target.get(r.getIdentityProvider());
+                    if (now != null && Objects.equals(now.getUserId(), r.getUserId())) {
+                        target.remove(r.getIdentityProvider());
+                    } else {
+                        LOGGER.warn("Ignoring removal of identity provider link \"{0}\"/\"{1}\": the current link is {2}",
+                                r.getIdentityProvider(), r.getUserId(),
+                                now == null ? "absent" : "to another user id");
                     }
                 }
             }
-            for (FederatedIdentityRepresentation r : parseAndValidate(realm, delta.getValuesToAdd())) {
+            for (FederatedIdentityRepresentation r : additions) {
                 target.put(r.getIdentityProvider(), r);
             }
         }
@@ -137,8 +154,9 @@ final class FederatedIdentityOps {
         for (FederatedIdentityRepresentation rep : plan.add()) {
             try {
                 add(user, List.of(rep));
-            } catch (AlreadyExistsException | InvalidAttributeValueException e) {
-                // Best effort: put back the link that was removed for this alias so the user is not left unlinked.
+            } catch (RuntimeException e) {
+                // Best effort, for any failure: put back the link that was removed for this alias so the
+                // user is not left unlinked. A failing restore is logged and never masks the original error.
                 FederatedIdentityRepresentation old = plan.removed().get(rep.getIdentityProvider());
                 if (old != null) {
                     restore(user, old);
