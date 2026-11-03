@@ -60,9 +60,14 @@ Semantics:
 
 - Only **direct** mappings are read and written. Roles a user inherits through group
   membership or through composites are not expanded.
-- These attributes are **not returned by default**; request them explicitly (for
-  example with `attributesToGet` or MidPoint's "fetch" option).
-- Roles listed in `ignoredRoles` (see below) are never read, added or removed.
+- All of these attributes except `requiredActions` are **not returned by default**;
+  request them explicitly (for example with `attributesToGet` or MidPoint's "fetch"
+  option). `requiredActions` is part of the user representation and is returned by default.
+- When `allowPartialAttributeValues` is requested, the role, composite and
+  `federatedIdentities` attributes are returned as `INCOMPLETE` (without values), as `groups` is.
+- Roles listed in `ignoredRoles` (see below) are never read, added or removed by user and
+  group role mappings. The list does not apply to composites. For client roles an entry
+  matches only the full `<clientUUID>/<roleName>` value.
 
 ## Configuration
 
@@ -76,7 +81,7 @@ Options added in this fork, on top of those inherited from upstream:
 
 The Keycloak REST client uses a lenient JSON mapper: properties returned by the server
 that the admin client does not know about are ignored instead of failing the request.
-The admin client (26.0.12) is tested against Keycloak 26.8.1.
+The admin client (26.0.12) is tested against Keycloak 26.5.7 and 26.8.1.
 
 ## Build
 
@@ -91,7 +96,7 @@ The connector JAR appears as `target/connector-keycloak-<version>.jar`.
 ## Testing
 
 ```sh
-mvn test       # unit tests (200+ tests, no Keycloak required)
+mvn test       # unit tests (no Keycloak required)
 mvn verify     # adds integration tests against a live Keycloak
 ```
 
@@ -119,7 +124,7 @@ KC needs to be reachable at `http://localhost:8090` by default; override with
 
 ## Significant changes vs upstream
 
-- **Keycloak admin client upgraded to 26.0.12** (was stuck at 24.0.2), tested against Keycloak 26.8.1
+- **Keycloak admin client upgraded to 26.0.12** (was stuck at 24.0.2), tested against Keycloak 26.5.7 and 26.8.1
 - **Java 17 minimum** (required by KC 26)
 - **`realmRole` object class** for provisioning realm-level roles
 - **`organization` object class** (KC 26+ feature, with graceful detection of server/realm enablement)
@@ -129,11 +134,12 @@ KC needs to be reachable at `http://localhost:8090` by default; override with
 - **Required actions** on users (`requiredActions`)
 - **Optional session logout on disable** (`logoutOnDisable`)
 - **User Profile schema**: user attributes derived from the realm User Profile (`userProfileSchemaEnabled`)
+- **Built-in attribute names win**: entries in `userAttributes` or `groupAttributes` that collide with an attribute the connector defines itself (for example `requiredActions`, `realmRoles`, `clientRoles`, `federatedIdentities`) are skipped with a warning
 - **Lenient JSON mapper** in the REST client: unknown properties in server responses are ignored
 - **Client `type` field** (added in KC 25) exposed as a schema attribute
 - **ConnId search-contract compliance**: `SearchResultsHandler.handleResult(allResultsReturned=true)` is now signaled correctly, fixing phantom page counts in MidPoint and respecting handler return values for early termination
 - **Bug fixes** found by integration tests: Jackson version mismatch (KC 26 group serialization), client search-by-name NPE, password update HTTP 400 against KC 26
-- **Test suite**: ~200 tests including pure-unit, schema, exception-mapping, and integration tests with full CRUD coverage
+- **Test suite**: pure-unit, schema, exception-mapping, and integration tests with full CRUD coverage
 - **Group hierarchy**: replaced fragile path-parsing with direct `getParentId()` lookups
 - **Removed obsolete profiles**: `midpoint40` and `midpoint44` (incompatible with Java 17)
 

@@ -21,9 +21,12 @@ import org.identityconnectors.framework.common.objects.*;
 import org.identityconnectors.framework.spi.operations.SearchOp;
 import org.keycloak.representations.userprofile.config.UPConfig;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Schema for Keycloak objects.
@@ -148,7 +151,8 @@ public class KeycloakSchema {
 
     private String[] getUserAttributes() {
         String userAttributes = configuration.getUserAttributes();
-        String[] explicit = userAttributes != null ? userAttributes.split(",") : new String[]{};
+        String[] explicit = withoutReserved(userAttributes != null ? userAttributes.split(",") : new String[]{},
+                USER_RESERVED, "userAttributes");
         if (!configuration.isUserProfileSchemaEnabled()) {
             return explicit;
         }
@@ -165,9 +169,37 @@ public class KeycloakSchema {
     private String[] getGroupAttributes() {
         String groupAttributes = configuration.getGroupAttributes();
         if (groupAttributes != null) {
-            return groupAttributes.split(",");
+            return withoutReserved(groupAttributes.split(","), GROUP_RESERVED, "groupAttributes");
         }
         return new String[]{};
+    }
+
+    /** Attribute names the connector defines itself on the user object class. */
+    private static final Set<String> USER_RESERVED = Set.of(
+            KeycloakUserHandler.ATTR_EMAIL, KeycloakUserHandler.ATTR_EMAIL_VERIFIED,
+            KeycloakUserHandler.ATTR_FIRST_NAME, KeycloakUserHandler.ATTR_LAST_NAME,
+            KeycloakUserHandler.ATTR_CREATED_TIMESTAMP, KeycloakUserHandler.ATTR_REQUIRED_ACTIONS,
+            KeycloakUserHandler.ATTR_GROUPS, KeycloakUserHandler.ATTR_REALM_ROLES,
+            KeycloakUserHandler.ATTR_CLIENT_ROLES, KeycloakUserHandler.ATTR_FEDERATED_IDENTITIES);
+
+    /** Attribute names the connector defines itself on the group object class. */
+    private static final Set<String> GROUP_RESERVED = Set.of(
+            KeycloakGroupHandler.ATTR_PATH, KeycloakGroupHandler.ATTR_PARENT_GROUP,
+            KeycloakGroupHandler.ATTR_REALM_ROLES, KeycloakGroupHandler.ATTR_CLIENT_ROLES);
+
+    /** Drops configured entries whose name is already defined by the connector, so the schema has no duplicates. */
+    private static String[] withoutReserved(String[] entries, Set<String> reserved, String option) {
+        List<String> kept = new ArrayList<>();
+        for (String entry : entries) {
+            String name = entry.contains(":") ? entry.substring(0, entry.indexOf(':')) : entry;
+            if (reserved.contains(name)) {
+                LOG.warn("Ignoring {0} entry \"{1}\": the connector already defines an attribute with that name",
+                        option, entry);
+                continue;
+            }
+            kept.add(entry);
+        }
+        return kept.toArray(new String[0]);
     }
 
     private String[] getClientAttributes() {
