@@ -113,4 +113,30 @@ class KeycloakConfigurationTest {
         c.setHttpProxyScheme("https");
         assertEquals("https", c.getHttpProxyScheme());
     }
+
+    // --- ignored roles and flags ---
+
+    @Test
+    void ignoredRolesDefault() {
+        KeycloakConfiguration c = config();
+        c.setTargetRealmName("tr");
+        assertEquals(java.util.Set.of("default-roles-tr", "offline_access", "uma_authorization"),
+                c.resolveIgnoredRoles());
+    }
+
+    @Test
+    void ignoredRolesUseTargetRealm() {
+        KeycloakConfiguration c = config();
+        c.setRealmName("master");
+        c.setTargetRealmName("tr");
+        assertTrue(c.resolveIgnoredRoles().contains("default-roles-tr"));
+        assertFalse(c.resolveIgnoredRoles().contains("default-roles-master"));
+    }
+
+    @Test
+    void newFlagsDefaultFalse() {
+        KeycloakConfiguration c = config();
+        assertFalse(c.isLogoutOnDisable());
+        assertFalse(c.isUserProfileSchemaEnabled());
+    }
 }
