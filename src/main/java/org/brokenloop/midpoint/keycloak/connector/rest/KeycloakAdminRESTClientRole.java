@@ -80,18 +80,10 @@ public class KeycloakAdminRESTClientRole implements KeycloakClient.ClientRole {
 
     @Override
     public Uid createClientRole(KeycloakSchema schema, String realmName, Set<Attribute> createAttributes) throws AlreadyExistsException {
-        Set<String> compositeRealm = new LinkedHashSet<>();
-        Set<String> compositeClient = new LinkedHashSet<>();
-        Set<Attribute> roleAttributes = new HashSet<>();
-        for (Attribute attr : createAttributes) {
-            if (attr.getName().equals(ATTR_COMPOSITE_REALM_ROLES)) {
-                compositeRealm.addAll(CompositeOps.valuesOf(attr));
-            } else if (attr.getName().equals(ATTR_COMPOSITE_CLIENT_ROLES)) {
-                compositeClient.addAll(CompositeOps.valuesOf(attr));
-            } else {
-                roleAttributes.add(attr);
-            }
-        }
+        CompositeOps.CreateSplit split = CompositeOps.splitCreate(createAttributes);
+        Set<String> compositeRealm = split.realm();
+        Set<String> compositeClient = split.client();
+        Set<Attribute> roleAttributes = split.roleAttributes();
 
         RoleRepresentation rep = toClientRoleRep(schema, roleAttributes);
 
@@ -167,6 +159,9 @@ public class KeycloakAdminRESTClientRole implements KeycloakClient.ClientRole {
     @Override
     public void updateClientRole(KeycloakSchema schema, String realmName, Uid uid, Set<AttributeDelta> modifications, OperationOptions options) throws UnknownUidException {
         RoleRepresentation current = clientRole(realmName, uid);
+        // The delta may rename or move the role; the composites are read where it is stored now.
+        String storedContainerId = current.getContainerId();
+        String storedName = current.getName();
         AttributeDelta compositeRealmDelta = null;
         AttributeDelta compositeClientDelta = null;
 
@@ -232,15 +227,13 @@ public class KeycloakAdminRESTClientRole implements KeycloakClient.ClientRole {
             RoleDiff realmDiff = new RoleDiff(Set.of(), Set.of());
             RoleDiff clientDiff = new RoleDiff(Set.of(), Set.of());
             if (compositeRealmDelta != null || compositeClientDelta != null) {
-                RoleRepresentation stored = realm(realmName).rolesById().getRole(current.getId());
-                RoleResource existing = realm(realmName).clients().get(stored.getContainerId())
-                        .roles().get(stored.getName());
+                CompositeOps.Children existing = CompositeOps.read(realm(realmName).clients().get(storedContainerId)
+                        .roles().get(storedName));
                 if (compositeRealmDelta != null) {
-                    realmDiff = CompositeOps.diff(CompositeOps.readRealm(existing), compositeRealmDelta);
+                    realmDiff = CompositeOps.diff(existing.realm(), compositeRealmDelta);
                 }
                 if (compositeClientDelta != null) {
-                    clientDiff = CompositeOps.diff(CompositeOps.readClient(realm(realmName), existing),
-                            compositeClientDelta);
+                    clientDiff = CompositeOps.diff(existing.client(), compositeClientDelta);
                 }
                 CompositeOps.requireExisting(realm(realmName), realmDiff, clientDiff);
             }
@@ -387,28 +380,12 @@ public class KeycloakAdminRESTClientRole implements KeycloakClient.ClientRole {
             builder.addAttribute(ATTR_ATTRIBUTES, genericAttributes);
         }
 
-        addComposites(builder, realmName, rep, attributesToGet, allowPartialAttributeValues);
+        if (allowPartialAttributeValues || attributesToGet != null) {
+            CompositeOps.addToObject(builder,
+                    realm(realmName).clients().get(rep.getContainerId()).roles().get(rep.getName()),
+                    attributesToGet, allowPartialAttributeValues);
+        }
 
         return builder.build();
-    }
-
-    private void addComposites(ConnectorObjectBuilder builder, String realmName, RoleRepresentation rep,
-                               Set<String> attributesToGet, boolean allowPartialAttributeValues) {
-        for (String attrName : new String[]{ATTR_COMPOSITE_REALM_ROLES, ATTR_COMPOSITE_CLIENT_ROLES}) {
-            if (allowPartialAttributeValues) {
-                AttributeBuilder ab = new AttributeBuilder();
-                ab.setName(attrName).setAttributeValueCompleteness(AttributeValueCompleteness.INCOMPLETE);
-                ab.addValue(Collections.EMPTY_LIST);
-                builder.addAttribute(ab.build());
-
-            } else if (attributesToGet != null && shouldReturn(attributesToGet, attrName)) {
-                RoleResource resource = realm(realmName).clients().get(rep.getContainerId())
-                        .roles().get(rep.getName());
-                Set<String> values = attrName.equals(ATTR_COMPOSITE_REALM_ROLES)
-                        ? CompositeOps.readRealm(resource)
-                        : CompositeOps.readClient(realm(realmName), resource);
-                builder.addAttribute(attrName, new ArrayList<>(values));
-            }
-        }
     }
 }
