@@ -1,5 +1,5 @@
 /*
- *  Copyright Nomura Research Institute, Ltd.
+ *  Copyright the midpoint-connector-keycloak contributors
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -16,6 +16,8 @@
 package org.brokenloop.midpoint.keycloak.connector.rest;
 
 import org.brokenloop.midpoint.keycloak.connector.FederatedIdentityCodec;
+import org.identityconnectors.common.logging.Log;
+import org.identityconnectors.framework.common.exceptions.AlreadyExistsException;
 import org.identityconnectors.framework.common.exceptions.ConnectorException;
 import org.identityconnectors.framework.common.exceptions.InvalidAttributeValueException;
 import org.identityconnectors.framework.common.objects.AttributeDelta;
@@ -32,11 +34,17 @@ import java.util.*;
  */
 final class FederatedIdentityOps {
 
+    private static final Log LOGGER = Log.getLog(FederatedIdentityOps.class);
+
     private FederatedIdentityOps() {
     }
 
-    /** Aliases to unlink and links to add, in that order of application. */
-    record Plan(List<String> remove, List<FederatedIdentityRepresentation> add) {
+    /**
+     * Aliases to unlink and links to add, in that order of application. {@code removed} holds the links
+     * being unlinked so they can be restored if an add fails.
+     */
+    record Plan(List<String> remove, List<FederatedIdentityRepresentation> add,
+                Map<String, FederatedIdentityRepresentation> removed) {
         boolean isEmpty() {
             return remove.isEmpty() && add.isEmpty();
         }
@@ -115,25 +123,66 @@ final class FederatedIdentityOps {
                 add.add(e.getValue());
             }
         }
-        return new Plan(remove, add);
+        Map<String, FederatedIdentityRepresentation> removed = new LinkedHashMap<>();
+        for (String alias : remove) {
+            removed.put(alias, cur.get(alias));
+        }
+        return new Plan(remove, add, removed);
     }
 
     static void apply(UserResource user, Plan plan) {
         for (String alias : plan.remove()) {
             user.removeFederatedIdentity(alias);
         }
-        add(user, plan.add());
+        for (FederatedIdentityRepresentation rep : plan.add()) {
+            try {
+                add(user, List.of(rep));
+            } catch (AlreadyExistsException | InvalidAttributeValueException e) {
+                // Best effort: put back the link that was removed for this alias so the user is not left unlinked.
+                FederatedIdentityRepresentation old = plan.removed().get(rep.getIdentityProvider());
+                if (old != null) {
+                    restore(user, old);
+                }
+                throw e;
+            }
+        }
+    }
+
+    private static void restore(UserResource user, FederatedIdentityRepresentation old) {
+        try (Response res = user.addFederatedIdentity(old.getIdentityProvider(), old)) {
+            if (res.getStatus() != Response.Status.NO_CONTENT.getStatusCode()
+                    && res.getStatus() != Response.Status.CREATED.getStatusCode()) {
+                LOGGER.warn("Could not restore the identity provider link \"{0}\" after a failed update. status: {1}",
+                        old.getIdentityProvider(), res.getStatus());
+            }
+        } catch (RuntimeException e) {
+            LOGGER.warn(e, "Could not restore the identity provider link \"{0}\" after a failed update",
+                    old.getIdentityProvider());
+        }
     }
 
     static void add(UserResource user, List<FederatedIdentityRepresentation> links) {
         for (FederatedIdentityRepresentation rep : links) {
             try (Response res = user.addFederatedIdentity(rep.getIdentityProvider(), rep)) {
-                if (res.getStatus() != Response.Status.NO_CONTENT.getStatusCode()
-                        && res.getStatus() != Response.Status.CREATED.getStatusCode()) {
-                    throw new ConnectorException(String.format(
-                            "Keycloak returns unexpected error when linking identity provider \"%s\". status: %d",
-                            rep.getIdentityProvider(), res.getStatus()));
+                int status = res.getStatus();
+                if (status == Response.Status.NO_CONTENT.getStatusCode()
+                        || status == Response.Status.CREATED.getStatusCode()) {
+                    continue;
                 }
+                String target = String.format("identity provider \"%s\" link \"%s\"",
+                        rep.getIdentityProvider(), rep.getUserId());
+                if (status == Response.Status.CONFLICT.getStatusCode()) {
+                    throw new AlreadyExistsException(String.format(
+                            "Federated identity %s/%s is already linked to another user",
+                            rep.getIdentityProvider(), rep.getUserId()));
+                }
+                if (status >= 400 && status < 500) {
+                    throw new InvalidAttributeValueException(String.format(
+                            "Keycloak rejected the %s. status: %d", target, status));
+                }
+                throw new ConnectorException(String.format(
+                        "Keycloak returns unexpected error when linking identity provider \"%s\". status: %d",
+                        rep.getIdentityProvider(), status));
             }
         }
     }
