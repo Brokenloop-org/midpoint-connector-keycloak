@@ -196,6 +196,12 @@ public class KeycloakAdminRESTUser implements KeycloakClient.User {
             } else if (attr.getName().equals(ATTR_LAST_NAME)) {
                 newUser.setLastName(AttributeUtil.getAsStringValue(attr));
 
+            } else if (attr.getName().equals(ATTR_REQUIRED_ACTIONS)) {
+                List<String> actions = attr.getValue() == null ? new ArrayList<>()
+                        : attr.getValue().stream().filter(Objects::nonNull).map(Object::toString)
+                                .collect(Collectors.toList());
+                newUser.setRequiredActions(actions);
+
             } else if (attr.getName().equals(ATTR_GROUPS)) {
                 // Keycloak expects the group list as group path list.
                 // Because we set group id list here, we cant't use it for this API.
@@ -253,6 +259,7 @@ public class KeycloakAdminRESTUser implements KeycloakClient.User {
         AttributeDelta federatedIdentitiesDelta = null;
         FederatedIdentityOps.Plan linkPlan = null;
         boolean userAttributeChanged = false;
+        boolean disabled = false;
 
         try {
             UserResource user = usersResource.get(uid.getUidValue());
@@ -268,7 +275,9 @@ public class KeycloakAdminRESTUser implements KeycloakClient.User {
                     userAttributeChanged = true;
 
                 } else if (delta.getName().equals(ENABLE_NAME)) {
-                    current.setEnabled(AttributeDeltaUtil.getBooleanValue(delta));
+                    Boolean enabled = AttributeDeltaUtil.getBooleanValue(delta);
+                    current.setEnabled(enabled);
+                    disabled = Boolean.FALSE.equals(enabled);
                     userAttributeChanged = true;
 
                 } else if (delta.getName().equals(OperationalAttributes.PASSWORD_NAME)) {
@@ -299,6 +308,10 @@ public class KeycloakAdminRESTUser implements KeycloakClient.User {
 
                 } else if (delta.getName().equals(ATTR_LAST_NAME)) {
                     current.setLastName(toKeycloakValue(schema.userSchema, delta));
+                    userAttributeChanged = true;
+
+                } else if (delta.getName().equals(ATTR_REQUIRED_ACTIONS)) {
+                    current.setRequiredActions(applyMultiValueDelta(current.getRequiredActions(), delta));
                     userAttributeChanged = true;
 
                 } else if (delta.getName().equals(ATTR_GROUPS)) {
@@ -423,6 +436,33 @@ public class KeycloakAdminRESTUser implements KeycloakClient.User {
         if (linkPlan != null && !linkPlan.isEmpty()) {
             FederatedIdentityOps.apply(users(realmName).get(current.getId()), linkPlan);
         }
+
+        if (disabled && configuration.isLogoutOnDisable()) {
+            users(realmName).get(current.getId()).logout();
+        }
+    }
+
+    private static List<String> applyMultiValueDelta(List<String> existing, AttributeDelta delta) {
+        List<String> result;
+        if (delta.getValuesToReplace() != null) {
+            result = new ArrayList<>();
+            for (Object v : delta.getValuesToReplace()) {
+                if (v != null && !result.contains(v.toString())) result.add(v.toString());
+            }
+            return result;
+        }
+        result = existing == null ? new ArrayList<>() : new ArrayList<>(existing);
+        if (delta.getValuesToRemove() != null) {
+            for (Object v : delta.getValuesToRemove()) {
+                if (v != null) result.remove(v.toString());
+            }
+        }
+        if (delta.getValuesToAdd() != null) {
+            for (Object v : delta.getValuesToAdd()) {
+                if (v != null && !result.contains(v.toString())) result.add(v.toString());
+            }
+        }
+        return result;
     }
 
     @Override
@@ -556,6 +596,11 @@ public class KeycloakAdminRESTUser implements KeycloakClient.User {
         }
         if (shouldReturn(attributesToGet, ATTR_LAST_NAME)) {
             builder.addAttribute(ATTR_LAST_NAME, user.getLastName());
+        }
+
+        if (shouldReturn(attributesToGet, ATTR_REQUIRED_ACTIONS)) {
+            List<String> actions = user.getRequiredActions();
+            builder.addAttribute(ATTR_REQUIRED_ACTIONS, actions == null ? new ArrayList<String>() : actions);
         }
 
         Map<String, List<String>> attributes = user.getAttributes();

@@ -64,6 +64,9 @@ public class KeycloakUserHandler extends AbstractKeycloakHandler {
     // Federated identity links, each a JSON {"identityProvider":..,"userId":..,"userName":..}
     public static final String ATTR_FEDERATED_IDENTITIES = "federatedIdentities";
 
+    // Keycloak required actions, e.g. UPDATE_PASSWORD, VERIFY_EMAIL
+    public static final String ATTR_REQUIRED_ACTIONS = "requiredActions";
+
     // Password
     public static final String ATTR_PASSWORD = "__PASSWORD__";
     public static final String ATTR_PASSWORD_PERMANENT = "password_permanent";
@@ -82,6 +85,7 @@ public class KeycloakUserHandler extends AbstractKeycloakHandler {
         attrs.add(ATTR_REALM_ROLES);
         attrs.add(ATTR_CLIENT_ROLES);
         attrs.add(ATTR_FEDERATED_IDENTITIES);
+        attrs.add(ATTR_REQUIRED_ACTIONS);
         attrs.add(ATTR_PASSWORD_PERMANENT);
         attrs.addAll(OperationalAttributes.OPERATIONAL_ATTRIBUTE_NAMES);
 
@@ -189,6 +193,13 @@ public class KeycloakUserHandler extends AbstractKeycloakHandler {
                 .setType(ZonedDateTime.class)
                 .setCreateable(false)
                 .setUpdateable(false)
+                .build());
+
+        // Required actions (part of UserRepresentation, so returned by default)
+        builder.addAttributeInfo(AttributeInfoBuilder.define(ATTR_REQUIRED_ACTIONS)
+                .setMultiValued(true)
+                .setCreateable(true)
+                .setUpdateable(true)
                 .build());
 
         // Association
