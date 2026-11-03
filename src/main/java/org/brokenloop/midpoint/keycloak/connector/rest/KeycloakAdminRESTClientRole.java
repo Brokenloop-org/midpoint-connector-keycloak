@@ -141,7 +141,7 @@ public class KeycloakAdminRESTClientRole implements KeycloakClient.ClientRole {
                 // Configured Attributes
                 Map<String, List<String>> attrs = newClientRole.getAttributes();
                 if (attrs == null) {
-                    attrs = new HashMap();
+                    attrs = new HashMap<>();
                 }
 
                 for (Object v : attr.getValue()) {
@@ -192,7 +192,7 @@ public class KeycloakAdminRESTClientRole implements KeycloakClient.ClientRole {
                     // Configured Attributes
                     Map<String, List<String>> attrs = current.getAttributes();
                     if (attrs == null) {
-                        attrs = new HashMap();
+                        attrs = new HashMap<>();
                     }
 
                     // First, we need to remove the attributes

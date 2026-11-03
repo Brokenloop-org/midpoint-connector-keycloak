@@ -159,4 +159,21 @@ class KeycloakUserProfileIT extends AbstractKeycloakIT {
             setProfile(null);
         }
     }
+
+    @Test
+    void createWithOnlyAMultiValuedAttributeStoresIt() {
+        setProfile(null);
+        KeycloakConnector c = connector(true, null);
+        try {
+            Set<Attribute> attrs = new HashSet<>();
+            attrs.add(new Name("alice-only-multi"));
+            attrs.add(AttributeBuilder.build("tags", "x", "y"));
+            Uid uid = c.create(USER_OBJECT_CLASS, attrs, null);
+
+            ConnectorObject o = searchByUid(c, USER_OBJECT_CLASS, uid);
+            assertEquals(Set.of("x", "y"), new HashSet<>(o.getAttributeByName("tags").getValue()));
+        } finally {
+            c.dispose();
+        }
+    }
 }
