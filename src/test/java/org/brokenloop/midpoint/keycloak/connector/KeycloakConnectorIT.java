@@ -29,9 +29,11 @@ class KeycloakConnectorIT extends AbstractKeycloakIT {
     }
 
     @Test
-    void serverIs26_8() {
-        assertTrue(connector.client.getVersion().startsWith("26.8"),
-                "Expected Keycloak 26.8.x but was " + connector.client.getVersion());
+    void serverVersionMatchesExpected() {
+        String expected = System.getProperty("keycloak.expectedVersion");
+        Assumptions.assumeTrue(expected != null && !expected.isBlank(), "keycloak.expectedVersion not set");
+        assertTrue(connector.client.getVersion().startsWith(expected),
+                "Expected Keycloak " + expected + " but was " + connector.client.getVersion());
     }
 
     @Test

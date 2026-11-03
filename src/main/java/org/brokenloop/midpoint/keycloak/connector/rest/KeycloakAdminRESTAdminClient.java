@@ -15,6 +15,7 @@
  */
 package org.brokenloop.midpoint.keycloak.connector.rest;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.exc.UnrecognizedPropertyException;
@@ -49,7 +50,11 @@ public class KeycloakAdminRESTAdminClient implements KeycloakClient {
     private static final Log LOGGER = Log.getLog(KeycloakAdminRESTAdminClient.class);
 
     private static final ContextResolver<ObjectMapper> LENIENT_MAPPER_RESOLVER = new ContextResolver<>() {
+        // NON_NULL matches Keycloak's own client mapper: null properties of the admin client's
+        // representations (for example fields newer than the server) must not be sent, or older
+        // servers reject them as unknown fields.
         private final ObjectMapper mapper = new ObjectMapper()
+                .setSerializationInclusion(JsonInclude.Include.NON_NULL)
                 .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
         @Override
