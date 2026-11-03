@@ -282,8 +282,9 @@ public class KeycloakAdminRESTUser implements KeycloakClient.User {
 
                 } else if (delta.getName().equals(ENABLE_NAME)) {
                     Boolean enabled = AttributeDeltaUtil.getBooleanValue(delta);
+                    // Only an enabled -> disabled transition ends sessions; a user that is already disabled keeps its state.
+                    disabled = Boolean.FALSE.equals(enabled) && !Boolean.FALSE.equals(current.isEnabled());
                     current.setEnabled(enabled);
-                    disabled = Boolean.FALSE.equals(enabled);
                     userAttributeChanged = true;
 
                 } else if (delta.getName().equals(OperationalAttributes.PASSWORD_NAME)) {
