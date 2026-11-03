@@ -102,7 +102,7 @@ public final class CompositeOps {
             if (allowPartialAttributeValues) {
                 AttributeBuilder ab = new AttributeBuilder();
                 ab.setName(attrName).setAttributeValueCompleteness(AttributeValueCompleteness.INCOMPLETE);
-                ab.addValue(Collections.EMPTY_LIST);
+                ab.addValue(Collections.emptyList());
                 builder.addAttribute(ab.build());
 
             } else if (attributesToGet != null && KeycloakUtils.shouldReturn(attributesToGet, attrName)) {
