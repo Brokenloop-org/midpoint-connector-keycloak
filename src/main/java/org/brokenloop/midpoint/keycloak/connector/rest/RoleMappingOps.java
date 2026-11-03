@@ -61,6 +61,16 @@ public final class RoleMappingOps {
         return RoleMappings.withoutIgnored(refs, ignored);
     }
 
+    /** Fails with {@link InvalidAttributeValueException} when any of the given roles does not exist. */
+    public static void requireExisting(RealmResource realm, Set<String> realmRoles, Set<String> clientRoles) {
+        for (String name : realmRoles) {
+            if (resolveRealmRole(realm, name) == null) {
+                throw new InvalidAttributeValueException("Unknown realm role '" + name + "'");
+            }
+        }
+        resolveClient(realm, clientRoles, true);
+    }
+
     public static void applyRealm(RealmResource realm, RoleMappingResource rm, RoleDiff diff) {
         List<RoleRepresentation> add = new ArrayList<>();
         for (String name : diff.toAdd()) {
