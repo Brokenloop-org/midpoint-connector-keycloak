@@ -49,12 +49,14 @@ class FederatedIdentityOpsTest {
         FederatedIdentityRepresentation wanted = link("idp-1", "x");
         when(user.addFederatedIdentity(eq("idp-1"), same(wanted))).thenReturn(Response.status(409).build());
         when(user.addFederatedIdentity(eq("idp-1"), same(old))).thenReturn(Response.noContent().build());
+        org.keycloak.representations.idm.UserRepresentation rep = new org.keycloak.representations.idm.UserRepresentation();
+        rep.setUsername("alice");
+        when(user.toRepresentation()).thenReturn(rep);
 
         AlreadyExistsException e = assertThrows(AlreadyExistsException.class,
                 () -> FederatedIdentityOps.apply(user, replacePlan(old, wanted)));
 
-        assertTrue(e.getMessage().contains("idp-1/x"), e.getMessage());
-        assertTrue(e.getMessage().contains("already linked to another user"), e.getMessage());
+        assertTrue(e.getMessage().contains("User alice already has a link for identity provider idp-1"), e.getMessage());
         InOrder order = inOrder(user);
         order.verify(user).removeFederatedIdentity("idp-1");
         order.verify(user).addFederatedIdentity(eq("idp-1"), same(wanted));

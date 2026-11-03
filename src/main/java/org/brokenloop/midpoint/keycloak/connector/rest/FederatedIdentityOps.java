@@ -23,8 +23,10 @@ import org.identityconnectors.framework.common.exceptions.InvalidAttributeValueE
 import org.identityconnectors.framework.common.objects.AttributeDelta;
 import org.keycloak.admin.client.resource.RealmResource;
 import org.keycloak.admin.client.resource.UserResource;
+import org.keycloak.admin.client.resource.UsersResource;
 import org.keycloak.representations.idm.FederatedIdentityRepresentation;
 import org.keycloak.representations.idm.IdentityProviderRepresentation;
+import org.keycloak.representations.idm.UserRepresentation;
 
 import jakarta.ws.rs.core.Response;
 import java.util.*;
@@ -81,6 +83,47 @@ final class FederatedIdentityOps {
             reps.add(rep);
         }
         return reps;
+    }
+
+    /**
+     * Fails if another user than {@code selfUserId} (null on create) already holds one of the links.
+     * <p>
+     * Keycloak does not enforce uniqueness of (realm, identity provider, federated user id): the admin API only
+     * rejects a second link for the same provider on the same user. An identity linked to two users breaks the
+     * broker login of both (see keycloak/keycloak#29317), so it is refused here, before anything is written.
+     * The server matches {@code idpUserId} exactly and case-sensitively, and the match is re-checked exactly on
+     * the holder's own links so that only an identical identity counts.
+     */
+    static void requireNotHeldByOther(RealmResource realm, Collection<FederatedIdentityRepresentation> links,
+                                      String selfUserId) {
+        UsersResource users = realm.users();
+        for (FederatedIdentityRepresentation rep : links) {
+            List<UserRepresentation> holders = users.search(null, null, null, null, null,
+                    rep.getIdentityProvider(), rep.getUserId(), 0, 10, null, true);
+            if (holders == null) {
+                continue;
+            }
+            for (UserRepresentation holder : holders) {
+                if (holder.getId() != null && holder.getId().equals(selfUserId)) {
+                    continue;
+                }
+                if (holdsExactly(users.get(holder.getId()), rep)) {
+                    throw new AlreadyExistsException(String.format(
+                            "Federated identity %s/%s is already linked to another user (%s)",
+                            rep.getIdentityProvider(), rep.getUserId(), holder.getUsername()));
+                }
+            }
+        }
+    }
+
+    private static boolean holdsExactly(UserResource holder, FederatedIdentityRepresentation rep) {
+        for (FederatedIdentityRepresentation link : read(holder)) {
+            if (Objects.equals(link.getIdentityProvider(), rep.getIdentityProvider())
+                    && Objects.equals(link.getUserId(), rep.getUserId())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     static List<FederatedIdentityRepresentation> read(UserResource user) {
@@ -190,9 +233,10 @@ final class FederatedIdentityOps {
                 String target = String.format("identity provider \"%s\" link \"%s\"",
                         rep.getIdentityProvider(), rep.getUserId());
                 if (status == Response.Status.CONFLICT.getStatusCode()) {
+                    // Keycloak answers 409 only when this user already has a link for the provider.
                     throw new AlreadyExistsException(String.format(
-                            "Federated identity %s/%s is already linked to another user",
-                            rep.getIdentityProvider(), rep.getUserId()));
+                            "User %s already has a link for identity provider %s",
+                            usernameOf(user), rep.getIdentityProvider()));
                 }
                 if (status >= 400 && status < 500) {
                     throw new InvalidAttributeValueException(String.format(
@@ -203,6 +247,18 @@ final class FederatedIdentityOps {
                         rep.getIdentityProvider(), status));
             }
         }
+    }
+
+    private static String usernameOf(UserResource user) {
+        try {
+            UserRepresentation rep = user.toRepresentation();
+            if (rep != null && rep.getUsername() != null) {
+                return rep.getUsername();
+            }
+        } catch (RuntimeException e) {
+            LOGGER.ok("Could not read the username for an error message: {0}", e.getMessage());
+        }
+        return "(unknown)";
     }
 
     private static boolean same(FederatedIdentityRepresentation a, FederatedIdentityRepresentation b) {

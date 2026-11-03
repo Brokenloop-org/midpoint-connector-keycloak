@@ -73,6 +73,10 @@ Semantics:
   removal is ignored with a warning.
 - A single create, add or replace must not contain two `federatedIdentities` values with
   the same `identityProvider`; such a request is rejected before anything is written.
+- Before a link is added, the connector checks that no other user holds the same identity
+  provider and `userId` (exact, case-sensitive match) and fails with `AlreadyExistsException`
+  without writing anything, because Keycloak does not enforce this and a shared identity
+  breaks broker login for both users ([keycloak/keycloak#29317](https://github.com/keycloak/keycloak/issues/29317)).
 
 ## Configuration
 

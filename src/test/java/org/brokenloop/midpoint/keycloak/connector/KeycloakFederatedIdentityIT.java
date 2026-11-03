@@ -2,7 +2,9 @@ package org.brokenloop.midpoint.keycloak.connector;
 
 import org.identityconnectors.framework.common.exceptions.InvalidAttributeValueException;
 import org.identityconnectors.framework.common.objects.*;
+import org.identityconnectors.framework.common.exceptions.AlreadyExistsException;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.keycloak.admin.client.Keycloak;
@@ -40,6 +42,16 @@ class KeycloakFederatedIdentityIT extends AbstractKeycloakIT {
     static void teardown() {
         if (connector != null) connector.dispose();
         teardownRealm(REALM);
+    }
+
+    /** Links are unique per identity across the realm now, so every test starts without users. */
+    @AfterEach
+    void deleteUsers() {
+        try (Keycloak admin = adminClient()) {
+            for (var u : admin.realm(REALM).users().list()) {
+                admin.realm(REALM).users().delete(u.getId()).close();
+            }
+        }
     }
 
     private static String json(String userId) {
@@ -134,10 +146,6 @@ class KeycloakFederatedIdentityIT extends AbstractKeycloakIT {
                 () -> update(uid, AttributeDeltaBuilder.build("federatedIdentities", List.of(bad), List.of())));
     }
 
-    private static String json(String idp, String userId) {
-        return "{\"identityProvider\":\"" + idp + "\",\"userId\":\"" + userId + "\",\"userName\":\"" + userId + "\"}";
-    }
-
     @Test
     void removeStaleValueKeepsCurrentLink() {
         Uid uid = createUser("alice-stale", AttributeBuilder.build("federatedIdentities", json("new")));
@@ -162,6 +170,59 @@ class KeycloakFederatedIdentityIT extends AbstractKeycloakIT {
         List<FederatedIdentityRepresentation> l = links(uid);
         assertEquals(1, l.size());
         assertEquals("keep", l.get(0).getUserId());
+    }
+
+    @Test
+    void createWithIdentityHeldByAnotherUserFails() {
+        createUser("bob-holder", AttributeBuilder.build("federatedIdentities", json("x")));
+        AlreadyExistsException e = assertThrows(AlreadyExistsException.class, () -> createUser("alice-clash",
+                AttributeBuilder.build("federatedIdentities", json("x"))));
+        assertTrue(e.getMessage().contains("idp-1/x"), e.getMessage());
+        assertTrue(e.getMessage().contains("bob-holder"), e.getMessage());
+        assertNull(searchByNameOrNull("alice-clash"));
+    }
+
+    @Test
+    void replaceToIdentityHeldByAnotherUserFails() {
+        createUser("bob-holder", AttributeBuilder.build("federatedIdentities", json("x")));
+        Uid alice = createUser("alice-clash", AttributeBuilder.build("federatedIdentities", json("old")));
+        AttributeDeltaBuilder b = new AttributeDeltaBuilder();
+        b.setName("federatedIdentities");
+        b.addValueToReplace(json("x"));
+        AlreadyExistsException e = assertThrows(AlreadyExistsException.class, () -> update(alice, b.build()));
+        assertTrue(e.getMessage().contains("bob-holder"), e.getMessage());
+        List<FederatedIdentityRepresentation> l = links(alice);
+        assertEquals(1, l.size());
+        assertEquals("old", l.get(0).getUserId());
+    }
+
+    @Test
+    void addToIdentityHeldByAnotherUserLeavesOtherChangesUntouched() {
+        createUser("bob-holder", AttributeBuilder.build("federatedIdentities", json("x")));
+        Uid alice = createUser("alice-clash", AttributeBuilder.build("federatedIdentities", json("old")));
+        assertThrows(AlreadyExistsException.class, () -> update(alice,
+                AttributeDeltaBuilder.build("federatedIdentities", List.of(json("x")), List.of(json("old"))),
+                AttributeDeltaBuilder.build("email", List.of("new@example.com"), List.of())));
+        assertEquals("old", links(alice).get(0).getUserId());
+        ConnectorObject o = searchByUidWithAttrs(connector, USER_OBJECT_CLASS, alice, "email");
+        assertNull(AttributeUtil.getStringValue(o.getAttributeByName("email")));
+    }
+
+    @Test
+    void relinkSameIdentityToSameUserIsNoop() {
+        Uid alice = createUser("alice-same", AttributeBuilder.build("federatedIdentities", json("x")));
+        update(alice, AttributeDeltaBuilder.build("federatedIdentities", List.of(json("x")), List.of()));
+        List<FederatedIdentityRepresentation> l = links(alice);
+        assertEquals(1, l.size());
+        assertEquals("x", l.get(0).getUserId());
+    }
+
+    @Test
+    void differentCaseIsNotTreatedAsSameIdentity() {
+        // Keycloak 26.8 matches idpUserId exactly and case-sensitively, so idp-1/X and idp-1/x are different identities.
+        createUser("bob-holder", AttributeBuilder.build("federatedIdentities", json("X")));
+        Uid alice = createUser("alice-case", AttributeBuilder.build("federatedIdentities", json("x")));
+        assertEquals("x", links(alice).get(0).getUserId());
     }
 
     private ConnectorObject searchByNameOrNull(String name) {
