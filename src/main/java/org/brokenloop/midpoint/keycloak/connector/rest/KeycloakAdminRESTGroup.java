@@ -74,7 +74,7 @@ public class KeycloakAdminRESTGroup implements KeycloakClient.Group {
         // KC silently ignores parentId on the create payload, so nesting requires
         // the subGroup() endpoint on the parent.
         String parentId = null;
-        Set<String> ignoredRoles = configuration.resolveIgnoredRoles();
+        Set<String> ignoredRoles = configuration.ignoredRolesResolved();
         Set<String> addRealmRoles = new LinkedHashSet<>();
         Set<String> addClientRoles = new LinkedHashSet<>();
         Set<Attribute> groupAttributes = new HashSet<>();
@@ -219,7 +219,7 @@ public class KeycloakAdminRESTGroup implements KeycloakClient.Group {
 
             // Validate the role adds before the first write so a bad role does not leave a half-applied update.
             if (realmRolesDelta != null || clientRolesDelta != null) {
-                Set<String> ignoredRoles = configuration.resolveIgnoredRoles();
+                Set<String> ignoredRoles = configuration.ignoredRolesResolved();
                 RoleMappingResource rm = group.roles();
                 if (realmRolesDelta != null) {
                     realmDiff = RoleMappings.diff(RoleMappingOps.readRealm(rm, ignoredRoles), realmRolesDelta, ignoredRoles);
@@ -456,7 +456,7 @@ public class KeycloakAdminRESTGroup implements KeycloakClient.Group {
                 builder.addAttribute(ab.build());
 
             } else if (attributesToGet != null && shouldReturn(attributesToGet, attrName)) {
-                Set<String> ignoredRoles = configuration.resolveIgnoredRoles();
+                Set<String> ignoredRoles = configuration.ignoredRolesResolved();
                 RoleMappingResource rm = groups(realmName).group(group.getId()).roles();
                 Set<String> values = attrName.equals(ATTR_REALM_ROLES)
                         ? RoleMappingOps.readRealm(rm, ignoredRoles)
