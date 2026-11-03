@@ -88,4 +88,29 @@ class UserProfileSchemaTest {
         p.setUnmanagedAttributePolicy(UPConfig.UnmanagedAttributePolicy.ENABLED);
         assertFalse(UserProfileSchema.warnsAboutUnmanagedWrites(new String[]{"extra"}, p));
     }
+
+    @Test
+    void reportsExplicitSingleValuedAgainstMultivaluedProfileAttribute() {
+        UPConfig p = profile(attr("tags", true));
+        assertEquals(java.util.List.of("tags"), UserProfileSchema.multiplicityConflicts(new String[]{"tags"}, p));
+        // explicit wins: the merged schema keeps the explicit single-valued entry
+        assertArrayEquals(new String[]{"tags"}, UserProfileSchema.merge(new String[]{"tags"}, p));
+    }
+
+    @Test
+    void reportsExplicitMultivaluedAgainstSingleValuedProfileAttribute() {
+        UPConfig p = profile(attr("dept", false));
+        assertEquals(java.util.List.of("dept"),
+                UserProfileSchema.multiplicityConflicts(new String[]{"dept:multivalued"}, p));
+        assertArrayEquals(new String[]{"dept:multivalued"},
+                UserProfileSchema.merge(new String[]{"dept:multivalued"}, p));
+    }
+
+    @Test
+    void noMultiplicityConflictWhenTheyAgreeOrTheProfileIsSilent() {
+        UPConfig p = profile(attr("dept", false), attr("tags", true));
+        assertTrue(UserProfileSchema.multiplicityConflicts(
+                new String[]{"dept", "tags:multivalued", "extra:multivalued"}, p).isEmpty());
+        assertTrue(UserProfileSchema.multiplicityConflicts(new String[]{"dept"}, null).isEmpty());
+    }
 }

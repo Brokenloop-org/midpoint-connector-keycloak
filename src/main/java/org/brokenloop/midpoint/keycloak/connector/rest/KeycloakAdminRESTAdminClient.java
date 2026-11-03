@@ -49,7 +49,7 @@ public class KeycloakAdminRESTAdminClient implements KeycloakClient {
 
     private static final Log LOGGER = Log.getLog(KeycloakAdminRESTAdminClient.class);
 
-    private static final ContextResolver<ObjectMapper> LENIENT_MAPPER_RESOLVER = new ContextResolver<>() {
+    static final ContextResolver<ObjectMapper> LENIENT_MAPPER_RESOLVER = new ContextResolver<>() {
         // NON_NULL matches Keycloak's own client mapper: null properties of the admin client's
         // representations (for example fields newer than the server) must not be sent, or older
         // servers reject them as unknown fields.
