@@ -18,6 +18,7 @@ package org.brokenloop.midpoint.keycloak.connector;
 import org.identityconnectors.framework.common.exceptions.AlreadyExistsException;
 import org.identityconnectors.framework.common.exceptions.UnknownUidException;
 import org.identityconnectors.framework.common.objects.*;
+import org.keycloak.representations.userprofile.config.UPConfig;
 
 import java.util.Set;
 
@@ -41,6 +42,11 @@ public interface KeycloakClient {
      * Requires the server-level "organization" feature to also be enabled.
      */
     boolean isRealmOrganizationsEnabled(String realmName);
+
+    /**
+     * Returns the User Profile configuration of the given realm.
+     */
+    UPConfig getUserProfileConfig(String realmName);
 
     User user();
 

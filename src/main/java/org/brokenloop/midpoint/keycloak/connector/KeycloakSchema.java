@@ -15,9 +15,11 @@
  */
 package org.brokenloop.midpoint.keycloak.connector;
 
+import org.identityconnectors.common.logging.Log;
 import org.identityconnectors.framework.common.exceptions.ConnectorException;
 import org.identityconnectors.framework.common.objects.*;
 import org.identityconnectors.framework.spi.operations.SearchOp;
+import org.keycloak.representations.userprofile.config.UPConfig;
 
 import java.util.Collections;
 import java.util.HashMap;
@@ -29,6 +31,8 @@ import java.util.Map;
  * @author Hiroyuki Wada
  */
 public class KeycloakSchema {
+
+    private static final Log LOG = Log.getLog(KeycloakSchema.class);
 
     private final KeycloakConfiguration configuration;
     private final KeycloakClient client;
@@ -144,10 +148,18 @@ public class KeycloakSchema {
 
     private String[] getUserAttributes() {
         String userAttributes = configuration.getUserAttributes();
-        if (userAttributes != null) {
-            return userAttributes.split(",");
+        String[] explicit = userAttributes != null ? userAttributes.split(",") : new String[]{};
+        if (!configuration.isUserProfileSchemaEnabled()) {
+            return explicit;
         }
-        return new String[]{};
+        UPConfig profile = null;
+        try {
+            profile = client.getUserProfileConfig(configuration.getTargetRealmName());
+        } catch (RuntimeException e) {
+            LOG.warn("Failed to read the user profile of realm {0}; using the configured user attributes only: {1}",
+                    configuration.getTargetRealmName(), e.getMessage());
+        }
+        return UserProfileSchema.merge(explicit, profile);
     }
 
     private String[] getGroupAttributes() {

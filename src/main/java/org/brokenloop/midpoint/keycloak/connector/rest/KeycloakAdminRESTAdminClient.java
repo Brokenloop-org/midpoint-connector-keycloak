@@ -29,6 +29,7 @@ import org.keycloak.admin.client.Keycloak;
 import org.keycloak.admin.client.KeycloakBuilder;
 import org.keycloak.admin.client.resource.RealmResource;
 import org.keycloak.representations.info.ServerInfoRepresentation;
+import org.keycloak.representations.userprofile.config.UPConfig;
 
 import jakarta.ws.rs.ProcessingException;
 import jakarta.ws.rs.ext.ContextResolver;
@@ -172,6 +173,11 @@ public class KeycloakAdminRESTAdminClient implements KeycloakClient {
         }
         return info.getFeatures().stream()
                 .anyMatch(f -> featureName.equalsIgnoreCase(f.getName()) && f.isEnabled());
+    }
+
+    @Override
+    public UPConfig getUserProfileConfig(String realmName) {
+        return realm(realmName).users().userProfile().getConfiguration();
     }
 
     @Override
