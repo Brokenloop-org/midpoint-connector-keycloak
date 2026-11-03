@@ -106,6 +106,7 @@ public class KeycloakAdminRESTUser implements KeycloakClient.User {
         // Validate the links before creating the user so a bad link does not leave a half-created user behind.
         List<FederatedIdentityRepresentation> addLinks = FederatedIdentityOps.parseAndValidate(
                 realm(realmName), federatedIdentities == null ? null : federatedIdentities.getValue());
+        FederatedIdentityOps.requireNotHeldByOther(realm(realmName), addLinks, null);
 
         UserRepresentation newUser = toUserRep(schema, userAttributes);
 
@@ -389,6 +390,7 @@ public class KeycloakAdminRESTUser implements KeycloakClient.User {
                 // Validate and plan before any write so a bad link fails the whole update.
                 linkPlan = FederatedIdentityOps.plan(realm(realmName), FederatedIdentityOps.read(user),
                         federatedIdentitiesDelta);
+                FederatedIdentityOps.requireNotHeldByOther(realm(realmName), linkPlan.add(), current.getId());
             }
 
             // Validate the role adds before the first write so a bad role does not leave a half-applied update.
