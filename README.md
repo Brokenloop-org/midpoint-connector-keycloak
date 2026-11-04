@@ -146,6 +146,7 @@ KC needs to be reachable at `http://localhost:8090` by default; override with
 - **Optional session logout on disable** (`logoutOnDisable`)
 - **User Profile schema**: user attributes derived from the realm User Profile (`userProfileSchemaEnabled`)
 - **Built-in attribute names win**: entries in `userAttributes` or `groupAttributes` that collide with an attribute the connector defines itself (for example `requiredActions`, `realmRoles`, `clientRoles`, `federatedIdentities`) are skipped with a warning
+- **Bundled JAX-RS implementation**: the REST client installs its own RESTEasy runtime delegate, so it works inside hosts (such as midPoint) that expose a different JAX-RS implementation through the parent classloader
 - **Lenient JSON mapper** in the REST client: unknown properties in server responses are ignored
 - **Client `type` field** (added in KC 25) exposed as a schema attribute
 - **ConnId search-contract compliance**: `SearchResultsHandler.handleResult(allResultsReturned=true)` is now signaled correctly, fixing phantom page counts in MidPoint and respecting handler return values for early termination
