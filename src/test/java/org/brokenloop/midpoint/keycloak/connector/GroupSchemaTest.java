@@ -59,4 +59,17 @@ class GroupSchemaTest {
         AttributeInfo tags = findAttribute(schema, "tags").orElseThrow();
         assertTrue(tags.isMultiValued());
     }
+
+    @Test
+    void roleMappingAttributes() {
+        ObjectClassInfo schema = KeycloakGroupHandler.getGroupSchema(new String[]{});
+        for (String name : new String[]{"realmRoles", "clientRoles"}) {
+            AttributeInfo info = findAttribute(schema, name).orElseThrow();
+            assertEquals(String.class, info.getType());
+            assertTrue(info.isMultiValued());
+            assertTrue(info.isCreateable());
+            assertTrue(info.isUpdateable());
+            assertFalse(info.isReturnedByDefault());
+        }
+    }
 }

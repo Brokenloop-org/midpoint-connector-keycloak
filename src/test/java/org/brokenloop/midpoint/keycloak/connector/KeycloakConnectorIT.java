@@ -29,6 +29,14 @@ class KeycloakConnectorIT extends AbstractKeycloakIT {
     }
 
     @Test
+    void serverVersionMatchesExpected() {
+        String expected = System.getProperty("keycloak.expectedVersion");
+        Assumptions.assumeTrue(expected != null && !expected.isBlank(), "keycloak.expectedVersion not set");
+        assertTrue(connector.client.getVersion().startsWith(expected),
+                "Expected Keycloak " + expected + " but was " + connector.client.getVersion());
+    }
+
+    @Test
     void schema_containsAllObjectClasses() {
         Schema schema = connector.schema();
         assertNotNull(schema);

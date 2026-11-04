@@ -151,7 +151,7 @@ public class KeycloakAdminRESTClient implements KeycloakClient.Client {
                 // Configured Attributes
                 Map<String, String> attrs = newClient.getAttributes();
                 if (attrs == null) {
-                    attrs = new HashMap();
+                    attrs = new HashMap<>();
                 }
 
                 if (schema.isClientSchema(attr)) {
@@ -259,7 +259,7 @@ public class KeycloakAdminRESTClient implements KeycloakClient.Client {
                     // Configured Attributes
                     Map<String, String> attrs = current.getAttributes();
                     if (attrs == null) {
-                        attrs = new HashMap();
+                        attrs = new HashMap<>();
                     }
 
                     if (schema.isClientSchema(delta)) {

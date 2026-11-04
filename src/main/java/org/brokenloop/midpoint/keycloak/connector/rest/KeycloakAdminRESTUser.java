@@ -15,10 +15,13 @@
  */
 package org.brokenloop.midpoint.keycloak.connector.rest;
 
+import org.brokenloop.midpoint.keycloak.connector.FederatedIdentityCodec;
 import org.brokenloop.midpoint.keycloak.connector.KeycloakClient;
 import org.brokenloop.midpoint.keycloak.connector.KeycloakConfiguration;
 import org.brokenloop.midpoint.keycloak.connector.KeycloakSchema;
 import org.brokenloop.midpoint.keycloak.connector.KeycloakUtils;
+import org.brokenloop.midpoint.keycloak.connector.RoleDiff;
+import org.brokenloop.midpoint.keycloak.connector.RoleMappings;
 import org.identityconnectors.common.logging.Log;
 import org.identityconnectors.common.security.GuardedString;
 import org.identityconnectors.framework.common.exceptions.AlreadyExistsException;
@@ -27,9 +30,11 @@ import org.identityconnectors.framework.common.exceptions.UnknownUidException;
 import org.identityconnectors.framework.common.objects.*;
 import org.keycloak.admin.client.Keycloak;
 import org.keycloak.admin.client.resource.RealmResource;
+import org.keycloak.admin.client.resource.RoleMappingResource;
 import org.keycloak.admin.client.resource.UserResource;
 import org.keycloak.admin.client.resource.UsersResource;
 import org.keycloak.representations.idm.CredentialRepresentation;
+import org.keycloak.representations.idm.FederatedIdentityRepresentation;
 import org.keycloak.representations.idm.GroupRepresentation;
 import org.keycloak.representations.idm.UserRepresentation;
 
@@ -75,7 +80,35 @@ public class KeycloakAdminRESTUser implements KeycloakClient.User {
     @Override
     public Uid createUser(KeycloakSchema schema, String realmName, Set<Attribute> createAttributes)
             throws AlreadyExistsException {
-        UserRepresentation newUser = toUserRep(schema, createAttributes);
+        Set<String> ignoredRoles = configuration.ignoredRolesResolved();
+        Set<String> addRealmRoles = new LinkedHashSet<>();
+        Set<String> addClientRoles = new LinkedHashSet<>();
+        Set<Attribute> userAttributes = new HashSet<>();
+        Attribute federatedIdentities = null;
+        for (Attribute attr : createAttributes) {
+            if (attr.getName().equals(ATTR_FEDERATED_IDENTITIES)) {
+                federatedIdentities = attr;
+            } else if (attr.getName().equals(ATTR_REALM_ROLES) || attr.getName().equals(ATTR_CLIENT_ROLES)) {
+                Set<String> target = attr.getName().equals(ATTR_REALM_ROLES) ? addRealmRoles : addClientRoles;
+                if (attr.getValue() != null) {
+                    attr.getValue().stream().filter(Objects::nonNull).map(Object::toString).forEach(target::add);
+                }
+            } else {
+                userAttributes.add(attr);
+            }
+        }
+
+        // Validate roles and links before creating the user so a bad value does not leave a half-created user behind.
+        addRealmRoles = RoleMappings.withoutIgnored(addRealmRoles, ignoredRoles);
+        addClientRoles = RoleMappings.withoutIgnored(addClientRoles, ignoredRoles);
+        RoleMappingOps.requireExisting(realm(realmName), addRealmRoles, addClientRoles);
+
+        // Validate the links before creating the user so a bad link does not leave a half-created user behind.
+        List<FederatedIdentityRepresentation> addLinks = FederatedIdentityOps.parseAndValidate(
+                realm(realmName), federatedIdentities == null ? null : federatedIdentities.getValue());
+        FederatedIdentityOps.requireNotHeldByOther(realm(realmName), addLinks, null);
+
+        UserRepresentation newUser = toUserRep(schema, userAttributes);
 
         CredentialRepresentation credential = null;
         if (configuration.isPasswordResetAPIEnabled()) {
@@ -117,6 +150,17 @@ public class KeycloakAdminRESTUser implements KeycloakClient.User {
             }
         }
 
+        if (!addRealmRoles.isEmpty() || !addClientRoles.isEmpty()) {
+            RoleMappingResource rm = users(realmName).get(uuid).roles();
+            RealmResource realm = realm(realmName);
+            RoleMappingOps.applyRealm(realm, rm, new RoleDiff(addRealmRoles, Set.of()));
+            RoleMappingOps.applyClient(realm, rm, new RoleDiff(addClientRoles, Set.of()));
+        }
+
+        if (!addLinks.isEmpty()) {
+            FederatedIdentityOps.add(users(realmName).get(uuid), addLinks);
+        }
+
         return new Uid(uuid, new Name(newUser.getUsername()));
     }
 
@@ -156,6 +200,12 @@ public class KeycloakAdminRESTUser implements KeycloakClient.User {
             } else if (attr.getName().equals(ATTR_LAST_NAME)) {
                 newUser.setLastName(AttributeUtil.getAsStringValue(attr));
 
+            } else if (attr.getName().equals(ATTR_REQUIRED_ACTIONS)) {
+                List<String> actions = attr.getValue() == null ? new ArrayList<>()
+                        : attr.getValue().stream().filter(Objects::nonNull).map(Object::toString)
+                                .collect(Collectors.toList());
+                newUser.setRequiredActions(actions);
+
             } else if (attr.getName().equals(ATTR_GROUPS)) {
                 // Keycloak expects the group list as group path list.
                 // Because we set group id list here, we cant't use it for this API.
@@ -171,8 +221,9 @@ public class KeycloakAdminRESTUser implements KeycloakClient.User {
                 if (schema.isMultiValuedUserSchema(attr)) {
                     Map<String, List<String>> attrs = newUser.getAttributes();
                     if (attrs == null) {
-                        attrs = new HashMap();
+                        attrs = new HashMap<>();
                     }
+                    newUser.setAttributes(attrs);
                     attrs.put(attr.getName(), attr.getValue().stream().map(a -> a.toString()).collect(Collectors.toList()));
 
                 } else {
@@ -208,7 +259,14 @@ public class KeycloakAdminRESTUser implements KeycloakClient.User {
         List<String> addGroupIds = new ArrayList<>();
         List<String> removeGroupIds = new ArrayList<>();
         CredentialRepresentation credential = null;
+        AttributeDelta realmRolesDelta = null;
+        AttributeDelta clientRolesDelta = null;
+        AttributeDelta federatedIdentitiesDelta = null;
+        FederatedIdentityOps.Plan linkPlan = null;
+        RoleDiff realmDiff = null;
+        RoleDiff clientDiff = null;
         boolean userAttributeChanged = false;
+        boolean disabled = false;
 
         try {
             UserResource user = usersResource.get(uid.getUidValue());
@@ -224,7 +282,10 @@ public class KeycloakAdminRESTUser implements KeycloakClient.User {
                     userAttributeChanged = true;
 
                 } else if (delta.getName().equals(ENABLE_NAME)) {
-                    current.setEnabled(AttributeDeltaUtil.getBooleanValue(delta));
+                    Boolean enabled = AttributeDeltaUtil.getBooleanValue(delta);
+                    // Only an enabled -> disabled transition ends sessions; a user that is already disabled keeps its state.
+                    disabled = Boolean.FALSE.equals(enabled) && !Boolean.FALSE.equals(current.isEnabled());
+                    current.setEnabled(enabled);
                     userAttributeChanged = true;
 
                 } else if (delta.getName().equals(OperationalAttributes.PASSWORD_NAME)) {
@@ -257,6 +318,10 @@ public class KeycloakAdminRESTUser implements KeycloakClient.User {
                     current.setLastName(toKeycloakValue(schema.userSchema, delta));
                     userAttributeChanged = true;
 
+                } else if (delta.getName().equals(ATTR_REQUIRED_ACTIONS)) {
+                    current.setRequiredActions(applyMultiValueDelta(current.getRequiredActions(), delta));
+                    userAttributeChanged = true;
+
                 } else if (delta.getName().equals(ATTR_GROUPS)) {
                     if (delta.getValuesToAdd() != null) {
                         for (Object group : delta.getValuesToAdd()) {
@@ -269,12 +334,21 @@ public class KeycloakAdminRESTUser implements KeycloakClient.User {
                         }
                     }
 
+                } else if (delta.getName().equals(ATTR_REALM_ROLES)) {
+                    realmRolesDelta = delta;
+
+                } else if (delta.getName().equals(ATTR_CLIENT_ROLES)) {
+                    clientRolesDelta = delta;
+
+                } else if (delta.getName().equals(ATTR_FEDERATED_IDENTITIES)) {
+                    federatedIdentitiesDelta = delta;
+
                 } else if (schema.isUserSchema(delta)) {
                     userAttributeChanged = true;
                     if (schema.isMultiValuedUserSchema(delta)) {
                         Map<String, List<String>> attrs = current.getAttributes();
                         if (attrs == null) {
-                            attrs = new HashMap();
+                            attrs = new HashMap<>();
                         }
                         List<String> values = attrs.getOrDefault(delta.getName(), new ArrayList<>());
                         attrs.put(delta.getName(), values);
@@ -314,8 +388,35 @@ public class KeycloakAdminRESTUser implements KeycloakClient.User {
             }
             current.setCredentials(null);
 
+            if (federatedIdentitiesDelta != null) {
+                // Validate and plan before any write so a bad link fails the whole update.
+                linkPlan = FederatedIdentityOps.plan(realm(realmName), FederatedIdentityOps.read(user),
+                        federatedIdentitiesDelta);
+                FederatedIdentityOps.requireNotHeldByOther(realm(realmName), linkPlan.add(), current.getId());
+            }
+
+            // Validate the role adds before the first write so a bad role does not leave a half-applied update.
+            if (realmRolesDelta != null || clientRolesDelta != null) {
+                Set<String> ignoredRoles = configuration.ignoredRolesResolved();
+                RoleMappingResource rm = user.roles();
+                if (realmRolesDelta != null) {
+                    realmDiff = RoleMappings.diff(RoleMappingOps.readRealm(rm, ignoredRoles), realmRolesDelta, ignoredRoles);
+                }
+                if (clientRolesDelta != null) {
+                    clientDiff = RoleMappings.diff(RoleMappingOps.readClient(rm, ignoredRoles), clientRolesDelta, ignoredRoles);
+                }
+                RoleMappingOps.requireExisting(realm(realmName),
+                        realmDiff == null ? Set.of() : realmDiff.toAdd(),
+                        clientDiff == null ? Set.of() : clientDiff.toAdd());
+            }
+
             if (userAttributeChanged) {
                 user.update(current);
+            }
+
+            // End sessions right after the disable is written, independent of the later sub-resource calls.
+            if (disabled && configuration.isLogoutOnDisable()) {
+                user.logout();
             }
 
         } catch (NotFoundException e) {
@@ -346,6 +447,44 @@ public class KeycloakAdminRESTUser implements KeycloakClient.User {
                         groupId, current.getId(), current.getUsername());
             }
         }
+
+        if (realmDiff != null || clientDiff != null) {
+            RoleMappingResource rm = users(realmName).get(current.getId()).roles();
+            RealmResource realm = realm(realmName);
+            if (realmDiff != null) {
+                RoleMappingOps.applyRealm(realm, rm, realmDiff);
+            }
+            if (clientDiff != null) {
+                RoleMappingOps.applyClient(realm, rm, clientDiff);
+            }
+        }
+
+        if (linkPlan != null && !linkPlan.isEmpty()) {
+            FederatedIdentityOps.apply(users(realmName).get(current.getId()), linkPlan);
+        }
+    }
+
+    private static List<String> applyMultiValueDelta(List<String> existing, AttributeDelta delta) {
+        List<String> result;
+        if (delta.getValuesToReplace() != null) {
+            result = new ArrayList<>();
+            for (Object v : delta.getValuesToReplace()) {
+                if (v != null && !result.contains(v.toString())) result.add(v.toString());
+            }
+            return result;
+        }
+        result = existing == null ? new ArrayList<>() : new ArrayList<>(existing);
+        if (delta.getValuesToRemove() != null) {
+            for (Object v : delta.getValuesToRemove()) {
+                if (v != null) result.remove(v.toString());
+            }
+        }
+        if (delta.getValuesToAdd() != null) {
+            for (Object v : delta.getValuesToAdd()) {
+                if (v != null && !result.contains(v.toString())) result.add(v.toString());
+            }
+        }
+        return result;
     }
 
     @Override
@@ -481,6 +620,11 @@ public class KeycloakAdminRESTUser implements KeycloakClient.User {
             builder.addAttribute(ATTR_LAST_NAME, user.getLastName());
         }
 
+        if (shouldReturn(attributesToGet, ATTR_REQUIRED_ACTIONS)) {
+            List<String> actions = user.getRequiredActions();
+            builder.addAttribute(ATTR_REQUIRED_ACTIONS, actions == null ? new ArrayList<String>() : actions);
+        }
+
         Map<String, List<String>> attributes = user.getAttributes();
         if (attributes != null) {
             for (Map.Entry<String, List<String>> entry : user.getAttributes().entrySet()) {
@@ -504,7 +648,7 @@ public class KeycloakAdminRESTUser implements KeycloakClient.User {
 
             AttributeBuilder ab = new AttributeBuilder();
             ab.setName(ATTR_GROUPS).setAttributeValueCompleteness(AttributeValueCompleteness.INCOMPLETE);
-            ab.addValue(Collections.EMPTY_LIST);
+            ab.addValue(Collections.emptyList());
             builder.addAttribute(ab.build());
         } else {
             if (attributesToGet == null) {
@@ -520,6 +664,44 @@ public class KeycloakAdminRESTUser implements KeycloakClient.User {
             }
         }
 
+        addRoleMappings(builder, realmName, user, attributesToGet, allowPartialAttributeValues);
+        addFederatedIdentities(builder, realmName, user, attributesToGet, allowPartialAttributeValues);
+
         return builder.build();
+    }
+
+    private void addRoleMappings(ConnectorObjectBuilder builder, String realmName, UserRepresentation user,
+                                 Set<String> attributesToGet, boolean allowPartialAttributeValues) {
+        for (String attrName : new String[]{ATTR_REALM_ROLES, ATTR_CLIENT_ROLES}) {
+            if (allowPartialAttributeValues) {
+                AttributeBuilder ab = new AttributeBuilder();
+                ab.setName(attrName).setAttributeValueCompleteness(AttributeValueCompleteness.INCOMPLETE);
+                ab.addValue(Collections.emptyList());
+                builder.addAttribute(ab.build());
+
+            } else if (attributesToGet != null && shouldReturn(attributesToGet, attrName)) {
+                Set<String> ignoredRoles = configuration.ignoredRolesResolved();
+                RoleMappingResource rm = users(realmName).get(user.getId()).roles();
+                Set<String> values = attrName.equals(ATTR_REALM_ROLES)
+                        ? RoleMappingOps.readRealm(rm, ignoredRoles)
+                        : RoleMappingOps.readClient(rm, ignoredRoles);
+                builder.addAttribute(attrName, new ArrayList<>(values));
+            }
+        }
+    }
+
+    private void addFederatedIdentities(ConnectorObjectBuilder builder, String realmName, UserRepresentation user,
+                                        Set<String> attributesToGet, boolean allowPartialAttributeValues) {
+        if (allowPartialAttributeValues) {
+            AttributeBuilder ab = new AttributeBuilder();
+            ab.setName(ATTR_FEDERATED_IDENTITIES).setAttributeValueCompleteness(AttributeValueCompleteness.INCOMPLETE);
+            ab.addValue(Collections.emptyList());
+            builder.addAttribute(ab.build());
+
+        } else if (attributesToGet != null && shouldReturn(attributesToGet, ATTR_FEDERATED_IDENTITIES)) {
+            List<String> values = FederatedIdentityOps.read(users(realmName).get(user.getId())).stream()
+                    .map(FederatedIdentityCodec::format).collect(Collectors.toList());
+            builder.addAttribute(ATTR_FEDERATED_IDENTITIES, values);
+        }
     }
 }

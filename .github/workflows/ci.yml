@@ -27,7 +27,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        kc-version: ['26.5.7']
+        kc-version: ['26.5.7', '26.8.1']
     services:
       keycloak:
         image: quay.io/keycloak/keycloak:${{ matrix.kc-version }}
@@ -60,7 +60,7 @@ jobs:
           echo "Keycloak did not become ready"
           exit 1
       - name: Run integration tests
-        run: mvn -B verify -Dgpg.skip=true -Dmaven.javadoc.skip=true -Dmaven.source.skip=true -Dassembly.skipAssembly=true -Dkeycloak.url=http://localhost:8090
+        run: mvn -B verify -Dgpg.skip=true -Dmaven.javadoc.skip=true -Dmaven.source.skip=true -Dassembly.skipAssembly=true -Dkeycloak.url=http://localhost:8090 -Dkeycloak.expectedVersion=${{ matrix.kc-version }}
       - name: Upload failsafe reports on failure
         if: failure()
         uses: actions/upload-artifact@v4

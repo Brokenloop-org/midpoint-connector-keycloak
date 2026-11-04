@@ -1,6 +1,6 @@
 services:
   keycloak:
-    image: quay.io/keycloak/keycloak:26.5.7
+    image: quay.io/keycloak/keycloak:26.8.1
     command: start-dev --health-enabled=true --features=organization
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin

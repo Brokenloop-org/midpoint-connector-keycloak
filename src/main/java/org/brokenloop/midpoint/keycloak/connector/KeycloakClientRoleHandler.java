@@ -46,6 +46,8 @@ public class KeycloakClientRoleHandler extends AbstractKeycloakHandler {
 
     public static final String ATTR_DESCRIPTION = "description";
     public static final String ATTR_ATTRIBUTES = "attributes";
+    public static final String ATTR_COMPOSITE_REALM_ROLES = "compositeRealmRoles";
+    public static final String ATTR_COMPOSITE_CLIENT_ROLES = "compositeClientRoles";
 
     public KeycloakClientRoleHandler(String instanceName, KeycloakConfiguration configuration, KeycloakClient client,
                                      KeycloakSchema schema) {
@@ -81,6 +83,15 @@ public class KeycloakClientRoleHandler extends AbstractKeycloakHandler {
                 .setRequired(false)
                 .setMultiValued(true)
                 .build());
+
+        for (String compositeAttr : new String[]{ATTR_COMPOSITE_REALM_ROLES, ATTR_COMPOSITE_CLIENT_ROLES}) {
+            builder.addAttributeInfo(AttributeInfoBuilder.define(compositeAttr)
+                    .setMultiValued(true)
+                    .setCreateable(true)
+                    .setUpdateable(true)
+                    .setReturnedByDefault(false)
+                    .build());
+        }
 
         ObjectClassInfo info = builder.build();
 

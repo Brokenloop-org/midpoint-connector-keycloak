@@ -15,6 +15,9 @@
  */
 package org.brokenloop.midpoint.keycloak.connector.rest;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.exc.UnrecognizedPropertyException;
 import org.brokenloop.midpoint.keycloak.connector.KeycloakClient;
 import org.brokenloop.midpoint.keycloak.connector.KeycloakConfiguration;
@@ -27,8 +30,10 @@ import org.keycloak.admin.client.Keycloak;
 import org.keycloak.admin.client.KeycloakBuilder;
 import org.keycloak.admin.client.resource.RealmResource;
 import org.keycloak.representations.info.ServerInfoRepresentation;
+import org.keycloak.representations.userprofile.config.UPConfig;
 
 import jakarta.ws.rs.ProcessingException;
+import jakarta.ws.rs.ext.ContextResolver;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -44,6 +49,20 @@ public class KeycloakAdminRESTAdminClient implements KeycloakClient {
 
     private static final Log LOGGER = Log.getLog(KeycloakAdminRESTAdminClient.class);
 
+    static final ContextResolver<ObjectMapper> LENIENT_MAPPER_RESOLVER = new ContextResolver<>() {
+        // NON_NULL matches Keycloak's own client mapper: null properties of the admin client's
+        // representations (for example fields newer than the server) must not be sent, or older
+        // servers reject them as unknown fields.
+        private final ObjectMapper mapper = new ObjectMapper()
+                .setSerializationInclusion(JsonInclude.Include.NON_NULL)
+                .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+
+        @Override
+        public ObjectMapper getContext(Class<?> type) {
+            return mapper;
+        }
+    };
+
     private final String instanceName;
     private final KeycloakAdminRESTUser user;
     private final KeycloakAdminRESTGroup group;
@@ -56,8 +75,11 @@ public class KeycloakAdminRESTAdminClient implements KeycloakClient {
     public KeycloakAdminRESTAdminClient(String instanceName, KeycloakConfiguration configuration) {
         this.instanceName = instanceName;
 
+        JaxRsRuntime.install();
         ResteasyClientBuilder resteasyClientBuilder = new ResteasyClientBuilderImpl();
         resteasyClientBuilder.connectionPoolSize(20);
+        // Tolerate fields that newer servers add to representations unknown to this client version.
+        resteasyClientBuilder.register(LENIENT_MAPPER_RESOLVER);
 
         // HTTP proxy configuration
         if (configuration.getHttpProxyHost() != null && configuration.getHttpProxyPort() != 0) {
@@ -129,7 +151,8 @@ public class KeycloakAdminRESTAdminClient implements KeycloakClient {
     public void test(String realmName) {
         try {
             Boolean enabled = adminClient.realm(realmName).toRepresentation().isEnabled();
-            if (!Boolean.TRUE.equals(enabled)) {
+            // Without view-realm the server leaves "enabled" out; only an explicit false means inactive.
+            if (Boolean.FALSE.equals(enabled)) {
                 throw new ConnectorException("The keycloak realm isn't active.");
             }
         } catch (ProcessingException e) {
@@ -145,18 +168,37 @@ public class KeycloakAdminRESTAdminClient implements KeycloakClient {
 
     @Override
     public String getVersion() {
-        ServerInfoRepresentation info = adminClient.serverInfo().getInfo();
+        return versionOf(adminClient.serverInfo().getInfo());
+    }
+
+    /** A service account of the target realm gets no systemInfo, so the version is then unknown. */
+    static String versionOf(ServerInfoRepresentation info) {
+        if (info == null || info.getSystemInfo() == null || info.getSystemInfo().getVersion() == null) {
+            return "unknown";
+        }
         return info.getSystemInfo().getVersion();
     }
 
     @Override
     public boolean isFeatureEnabled(String featureName) {
-        ServerInfoRepresentation info = adminClient.serverInfo().getInfo();
-        if (info.getFeatures() == null) {
-            return false;
+        return featureEnabled(adminClient.serverInfo().getInfo(), featureName);
+    }
+
+    /**
+     * Without a feature list (realm-scoped service accounts) nothing is known, so the feature is not reported
+     * as off; callers then rely on the realm's own flag.
+     */
+    static boolean featureEnabled(ServerInfoRepresentation info, String featureName) {
+        if (info == null || info.getFeatures() == null) {
+            return true;
         }
         return info.getFeatures().stream()
                 .anyMatch(f -> featureName.equalsIgnoreCase(f.getName()) && f.isEnabled());
+    }
+
+    @Override
+    public UPConfig getUserProfileConfig(String realmName) {
+        return realm(realmName).users().userProfile().getConfiguration();
     }
 
     @Override

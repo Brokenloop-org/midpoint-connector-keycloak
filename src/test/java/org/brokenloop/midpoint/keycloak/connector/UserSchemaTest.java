@@ -80,6 +80,19 @@ class UserSchemaTest {
     }
 
     @Test
+    void roleMappingAttributesNotReturnedByDefault() {
+        ObjectClassInfo schema = KeycloakUserHandler.getUserSchema(new String[]{});
+        for (String name : new String[]{"realmRoles", "clientRoles", "federatedIdentities"}) {
+            AttributeInfo info = findAttribute(schema, name).orElseThrow();
+            assertEquals(String.class, info.getType());
+            assertTrue(info.isMultiValued());
+            assertTrue(info.isCreateable());
+            assertTrue(info.isUpdateable());
+            assertFalse(info.isReturnedByDefault());
+        }
+    }
+
+    @Test
     void customAttribute_singleValued() {
         ObjectClassInfo schema = KeycloakUserHandler.getUserSchema(new String[]{"department"});
         AttributeInfo dept = findAttribute(schema, "department").orElseThrow();

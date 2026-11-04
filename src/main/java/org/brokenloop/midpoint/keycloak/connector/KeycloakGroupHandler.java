@@ -48,6 +48,10 @@ public class KeycloakGroupHandler extends AbstractKeycloakHandler {
     public static final String ATTR_PARENT_GROUP = "parentGroup";
     public static final String ATTR_SUB_GROUPS = "subGroups";
 
+    // Direct realm role names, and client roles as "<clientUuid>/<roleName>"
+    public static final String ATTR_REALM_ROLES = "realmRoles";
+    public static final String ATTR_CLIENT_ROLES = "clientRoles";
+
     public KeycloakGroupHandler(String instanceName, KeycloakConfiguration configuration, KeycloakClient client,
                                 KeycloakSchema schema) {
         super(instanceName, configuration, client, schema);
@@ -107,6 +111,15 @@ public class KeycloakGroupHandler extends AbstractKeycloakHandler {
                 .setMultiValued(false)
                 .setReturnedByDefault(false)
                 .build());
+
+        for (String roleAttr : new String[]{ATTR_REALM_ROLES, ATTR_CLIENT_ROLES}) {
+            builder.addAttributeInfo(AttributeInfoBuilder.define(roleAttr)
+                    .setMultiValued(true)
+                    .setCreateable(true)
+                    .setUpdateable(true)
+                    .setReturnedByDefault(false)
+                    .build());
+        }
 
         ObjectClassInfo groupSchemaInfo = builder.build();
 
