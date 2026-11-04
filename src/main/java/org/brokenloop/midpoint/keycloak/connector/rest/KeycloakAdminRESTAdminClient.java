@@ -75,6 +75,7 @@ public class KeycloakAdminRESTAdminClient implements KeycloakClient {
     public KeycloakAdminRESTAdminClient(String instanceName, KeycloakConfiguration configuration) {
         this.instanceName = instanceName;
 
+        JaxRsRuntime.install();
         ResteasyClientBuilder resteasyClientBuilder = new ResteasyClientBuilderImpl();
         resteasyClientBuilder.connectionPoolSize(20);
         // Tolerate fields that newer servers add to representations unknown to this client version.
