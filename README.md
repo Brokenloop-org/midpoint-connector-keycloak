@@ -78,7 +78,7 @@ Semantics:
   without writing anything, because Keycloak does not enforce this and a shared identity
   breaks broker login for both users ([keycloak/keycloak#29317](https://github.com/keycloak/keycloak/issues/29317)).
 
-Service accounts that belong to the target realm itself (rather than `master`) are supported; they need the `realm-management` roles `query-users`, `view-users` and `manage-users` (`view-realm` is not required). The server version is then reported as `unknown`.
+Service accounts that belong to the target realm itself (rather than `master`) are supported; they need the `realm-management` roles `query-users`, `view-users` and `manage-users` (`view-realm` is not required). The server version is then reported as `unknown`. Before Keycloak 26.8, such an account also needs `view-realm` to use the `organization` object class: without it Keycloak leaves `organizationsEnabled` out of the realm it returns, and the class is omitted from the schema.
 
 ## Configuration
 

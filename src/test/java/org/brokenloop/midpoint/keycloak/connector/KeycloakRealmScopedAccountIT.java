@@ -32,7 +32,22 @@ class KeycloakRealmScopedAccountIT extends AbstractKeycloakIT {
         createServiceAccount("svc-users", "query-users", "view-users", "manage-users");
         createServiceAccount("svc-no-profile", "view-clients");
         setupRealm(ORG_REALM, true);
-        createServiceAccountIn(ORG_REALM, "svc-org", "query-users", "view-users", "manage-users");
+        // Before Keycloak 26.8 the realm representation a service account gets without view-realm leaves out
+        // organizationsEnabled, so the connector cannot tell that organizations are on.
+        if (serverOlderThan(26, 8)) {
+            createServiceAccountIn(ORG_REALM, "svc-org", "query-users", "view-users", "manage-users", "view-realm");
+        } else {
+            createServiceAccountIn(ORG_REALM, "svc-org", "query-users", "view-users", "manage-users");
+        }
+    }
+
+    private static boolean serverOlderThan(int major, int minor) {
+        try (Keycloak admin = adminClient()) {
+            String[] v = admin.serverInfo().getInfo().getSystemInfo().getVersion().split("\\.");
+            int maj = Integer.parseInt(v[0]);
+            int min = Integer.parseInt(v[1]);
+            return maj < major || (maj == major && min < minor);
+        }
     }
 
     @AfterAll
