@@ -28,21 +28,6 @@ jobs:
       fail-fast: false
       matrix:
         kc-version: ['26.5.7']
-    services:
-      keycloak:
-        image: quay.io/keycloak/keycloak:${{ matrix.kc-version }}
-        env:
-          KC_BOOTSTRAP_ADMIN_USERNAME: admin
-          KC_BOOTSTRAP_ADMIN_PASSWORD: admin
-        ports:
-          - 8090:8080
-        # KC service-container needs custom command; use options to set it.
-        options: >-
-          --health-cmd "exec 3<>/dev/tcp/127.0.0.1/9000 && echo -e 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 && cat <&3 | grep -q '200 OK'"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 30
-          --health-start-period 30s
     steps:
       - uses: actions/checkout@v4
       - name: Set up JDK 17
@@ -51,13 +36,24 @@ jobs:
           distribution: 'temurin'
           java-version: 17
           cache: 'maven'
+      # A service container cannot take a command, and the Keycloak image
+      # exits after printing its help without one. Start it the way
+      # docker-compose.yml does.
+      - name: Start Keycloak
+        run: |
+          docker run -d --name keycloak -p 8090:8080 -p 9000:9000 \
+            -e KC_BOOTSTRAP_ADMIN_USERNAME=admin \
+            -e KC_BOOTSTRAP_ADMIN_PASSWORD=admin \
+            quay.io/keycloak/keycloak:${{ matrix.kc-version }} \
+            start-dev --health-enabled=true --features=organization
       - name: Wait for Keycloak
         run: |
-          for i in $(seq 1 60); do
-            curl -sf http://localhost:8090/realms/master > /dev/null && exit 0
+          for i in $(seq 1 90); do
+            curl -sf http://localhost:9000/health/ready > /dev/null && exit 0
             sleep 2
           done
           echo "Keycloak did not become ready"
+          docker logs keycloak
           exit 1
       - name: Run integration tests
         run: mvn -B verify -Dgpg.skip=true -Dmaven.javadoc.skip=true -Dmaven.source.skip=true -Dassembly.skipAssembly=true -Dkeycloak.url=http://localhost:8090
