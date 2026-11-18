@@ -10,17 +10,20 @@
         <relativePath></relativePath>
     </parent>
 
-    <groupId>jp.openstandia.connector</groupId>
+    <groupId>org.brokenloop.midpoint.keycloak.connector</groupId>
     <artifactId>connector-keycloak</artifactId>
-    <version>1.1.7-SNAPSHOT</version>
+    <version>2.0.0-SNAPSHOT</version>
     <packaging>jar</packaging>
 
-    <name>Keycloak Connector</name>
+    <name>MidPoint Keycloak Connector</name>
 
     <description>
-        Keycloak Connector.
+        ConnId connector for provisioning Keycloak resources from MidPoint.
+        Hard fork of openstandia/connector-keycloak with Keycloak 26 support,
+        realm role and Organization object classes, comprehensive test suite,
+        and Nix-based development environment.
     </description>
-    <url>https://github.com/openstandia/connector-keycloak</url>
+    <url>https://github.com/Brokenloop-org/midpoint-connector-keycloak</url>
 
     <licenses>
         <license>
@@ -30,36 +33,26 @@
         </license>
     </licenses>
 
-    <developers>
-        <developer>
-            <id>wadahiro</id>
-            <name>Hiroyuki Wada</name>
-            <email>h2-wada@nri.co.jp</email>
-            <organization>Nomura Research Institute, Ltd.</organization>
-            <timezone>+9</timezone>
-        </developer>
-    </developers>
-
     <scm>
-        <connection>scm:git:https://github.com/openstandia/connector-keycloak.git</connection>
-        <developerConnection>scm:git:https://github.com/openstandia/connector-keycloak.git</developerConnection>
-        <url>https://github.com/openstandia/connector-keycloak</url>
+        <connection>scm:git:https://github.com/Brokenloop-org/midpoint-connector-keycloak.git</connection>
+        <developerConnection>scm:git:https://github.com/Brokenloop-org/midpoint-connector-keycloak.git</developerConnection>
+        <url>https://github.com/Brokenloop-org/midpoint-connector-keycloak</url>
     </scm>
 
     <distributionManagement>
-        <snapshotRepository>
-            <id>ossrh</id>
-            <url>https://oss.sonatype.org/content/repositories/snapshots</url>
-        </snapshotRepository>
         <repository>
-            <id>ossrh</id>
-            <url>https://oss.sonatype.org/service/local/staging/deploy/maven2/</url>
+            <id>github</id>
+            <name>GitHub Packages</name>
+            <url>https://maven.pkg.github.com/Brokenloop-org/midpoint-connector-keycloak</url>
         </repository>
     </distributionManagement>
 
     <properties>
-        <connectorPackage>jp.openstandia.connector.keycloak</connectorPackage>
+        <connectorPackage>org.brokenloop.midpoint.keycloak.connector</connectorPackage>
         <connectorClass>KeycloakConnector</connectorClass>
+        <maven.compiler.source>17</maven.compiler.source>
+        <maven.compiler.target>17</maven.compiler.target>
+        <project.source.version>17</project.source.version>
     </properties>
 
     <repositories>
@@ -98,6 +91,16 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>2.22.2</version>
+                <configuration>
+                    <!-- The midpoint48 profile pulls in admin-gui which ships a
+                         logback.xml writing to ${midpoint.home}/log/midpoint.log.
+                         Without this property set, logback substitutes the literal
+                         "midpoint.home_IS_UNDEFINED" as the directory name. Route
+                         the logs into target/ instead so they get cleaned with mvn clean. -->
+                    <systemPropertyVariables>
+                        <midpoint.home>${project.build.directory}/midpoint-home</midpoint.home>
+                    </systemPropertyVariables>
+                </configuration>
                 <dependencies>
                     <dependency>
                         <groupId>org.apache.maven.surefire</groupId>
@@ -108,16 +111,48 @@
             </plugin>
 
             <plugin>
-                <groupId>org.sonatype.plugins</groupId>
-                <artifactId>nexus-staging-maven-plugin</artifactId>
-                <version>1.6.8</version>
-                <extensions>true</extensions>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <version>2.22.2</version>
                 <configuration>
-                    <serverId>ossrh</serverId>
-                    <nexusUrl>https://oss.sonatype.org/</nexusUrl>
-                    <autoReleaseAfterClose>true</autoReleaseAfterClose>
-                    <stagingProgressTimeoutMinutes>20</stagingProgressTimeoutMinutes>
+                    <systemPropertyVariables>
+                        <midpoint.home>${project.build.directory}/midpoint-home</midpoint.home>
+                    </systemPropertyVariables>
                 </configuration>
+                <dependencies>
+                    <dependency>
+                        <groupId>org.apache.maven.surefire</groupId>
+                        <artifactId>surefire-junit-platform</artifactId>
+                        <version>2.22.2</version>
+                    </dependency>
+                </dependencies>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>0.8.12</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>report</id>
+                        <phase>test</phase>
+                        <goals>
+                            <goal>report</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -150,26 +185,6 @@
                     </execution>
                 </executions>
             </plugin>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-gpg-plugin</artifactId>
-                <version>1.6</version>
-                <configuration>
-                    <gpgArguments>
-                        <arg>--pinentry-mode</arg>
-                        <arg>loopback</arg>
-                    </gpgArguments>
-                </configuration>
-                <executions>
-                    <execution>
-                        <id>sign-artifacts</id>
-                        <phase>verify</phase>
-                        <goals>
-                            <goal>sign</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
         </plugins>
     </build>
 
@@ -178,7 +193,17 @@
             <dependency>
                 <groupId>org.keycloak</groupId>
                 <artifactId>keycloak-admin-client</artifactId>
-                <version>24.0.2</version>
+                <version>26.0.7</version>
+            </dependency>
+            <!-- Align Jackson versions: KC 26 brings core 2.17.2 but RESTEasy
+                 brings Jakarta RS provider 2.15.4, causing serialization failures
+                 when using a custom ResteasyClient (e.g. GroupRepresentation). -->
+            <dependency>
+                <groupId>com.fasterxml.jackson</groupId>
+                <artifactId>jackson-bom</artifactId>
+                <version>2.17.2</version>
+                <type>pom</type>
+                <scope>import</scope>
             </dependency>
         </dependencies>
     </dependencyManagement>
@@ -187,6 +212,30 @@
         <dependency>
             <groupId>org.keycloak</groupId>
             <artifactId>keycloak-admin-client</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>5.10.2</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+            <version>5.11.0</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-junit-jupiter</artifactId>
+            <version>5.11.0</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-simple</artifactId>
+            <version>2.0.12</version>
+            <scope>test</scope>
         </dependency>
     </dependencies>
 
@@ -234,151 +283,6 @@
                     <artifactId>byte-buddy</artifactId>
                     <version>1.14.9</version>
                     <scope>provided</scope>
-                </dependency>
-            </dependencies>
-        </profile>
-        <profile>
-            <id>midpoint44</id>
-            <dependencies>
-                <dependency>
-                    <groupId>com.evolveum.midpoint.gui</groupId>
-                    <artifactId>admin-gui</artifactId>
-                    <type>jar</type>
-                    <classifier>classes</classifier>
-                    <version>4.4.8</version>
-                    <scope>provided</scope>
-                </dependency>
-                <dependency>
-                    <groupId>org.testng</groupId>
-                    <artifactId>testng</artifactId>
-                    <scope>test</scope>
-                    <exclusions>
-                        <exclusion>
-                            <groupId>org.yaml</groupId>
-                            <artifactId>snakeyaml</artifactId>
-                        </exclusion>
-                    </exclusions>
-                </dependency>
-                <dependency>
-                    <groupId>net.tirasa.connid</groupId>
-                    <artifactId>connector-framework</artifactId>
-                    <version>1.5.1.10</version>
-                    <scope>provided</scope>
-                </dependency>
-                <dependency>
-                    <groupId>net.tirasa.connid</groupId>
-                    <artifactId>connector-framework-internal</artifactId>
-                    <version>1.5.1.10</version>
-                    <scope>provided</scope>
-                </dependency>
-                <dependency>
-                    <groupId>net.tirasa.connid</groupId>
-                    <artifactId>connector-framework-contract</artifactId>
-                    <version>1.5.1.10</version>
-                    <scope>test</scope>
-                </dependency>
-                <dependency>
-                    <groupId>org.keycloak</groupId>
-                    <artifactId>keycloak-admin-client</artifactId>
-                    <exclusions>
-                        <exclusion>
-                            <groupId>org.jboss.resteasy</groupId>
-                            <artifactId>resteasy-client</artifactId>
-                        </exclusion>
-                        <exclusion>
-                            <groupId>org.jboss.resteasy</groupId>
-                            <artifactId>resteasy-multipart-provider</artifactId>
-                        </exclusion>
-                        <exclusion>
-                            <groupId>org.jboss.resteasy</groupId>
-                            <artifactId>resteasy-jackson2-provider</artifactId>
-                        </exclusion>
-                        <exclusion>
-                            <groupId>org.jboss.resteasy</groupId>
-                            <artifactId>resteasy-jaxb-provider</artifactId>
-                        </exclusion>
-                    </exclusions>
-                </dependency>
-            </dependencies>
-        </profile>
-        <profile>
-            <id>midpoint40</id>
-            <repositories>
-                <repository>
-                    <id>evolveum-nexus-releases</id>
-                    <name>Internal Releases</name>
-                    <url>https://nexus.evolveum.com/nexus/content/repositories/releases/</url>
-                </repository>
-                <repository>
-                    <id>evolveum-nexus-snapshots</id>
-                    <name>Internal Releases</name>
-                    <url>https://nexus.evolveum.com/nexus/content/repositories/snapshots/</url>
-                </repository>
-                <repository>
-                    <!-- Jasper references old http repository which fails with 308. -->
-                    <id>jaspersoft-third-party</id>
-                    <url>https://jaspersoft.jfrog.io/jaspersoft/third-party-ce-artifacts</url>
-                </repository>
-            </repositories>
-            <dependencies>
-                <dependency>
-                    <groupId>com.evolveum.midpoint.gui</groupId>
-                    <artifactId>admin-gui</artifactId>
-                    <type>jar</type>
-                    <classifier>classes</classifier>
-                    <version>4.0.4</version>
-                    <scope>provided</scope>
-                </dependency>
-                <dependency>
-                    <groupId>org.testng</groupId>
-                    <artifactId>testng</artifactId>
-                    <scope>test</scope>
-                    <exclusions>
-                        <exclusion>
-                            <groupId>org.yaml</groupId>
-                            <artifactId>snakeyaml</artifactId>
-                        </exclusion>
-                    </exclusions>
-                </dependency>
-                <dependency>
-                    <groupId>net.tirasa.connid</groupId>
-                    <artifactId>connector-framework</artifactId>
-                    <version>1.5.0.10</version>
-                    <scope>provided</scope>
-                </dependency>
-                <dependency>
-                    <groupId>net.tirasa.connid</groupId>
-                    <artifactId>connector-framework-internal</artifactId>
-                    <version>1.5.0.10</version>
-                    <scope>provided</scope>
-                </dependency>
-                <dependency>
-                    <groupId>net.tirasa.connid</groupId>
-                    <artifactId>connector-framework-contract</artifactId>
-                    <version>1.5.0.10</version>
-                    <scope>test</scope>
-                </dependency>
-                <dependency>
-                    <groupId>org.keycloak</groupId>
-                    <artifactId>keycloak-admin-client</artifactId>
-                    <exclusions>
-                        <exclusion>
-                            <groupId>org.jboss.resteasy</groupId>
-                            <artifactId>resteasy-client</artifactId>
-                        </exclusion>
-                        <exclusion>
-                            <groupId>org.jboss.resteasy</groupId>
-                            <artifactId>resteasy-multipart-provider</artifactId>
-                        </exclusion>
-                        <exclusion>
-                            <groupId>org.jboss.resteasy</groupId>
-                            <artifactId>resteasy-jackson2-provider</artifactId>
-                        </exclusion>
-                        <exclusion>
-                            <groupId>org.jboss.resteasy</groupId>
-                            <artifactId>resteasy-jaxb-provider</artifactId>
-                        </exclusion>
-                    </exclusions>
                 </dependency>
             </dependencies>
         </profile>
