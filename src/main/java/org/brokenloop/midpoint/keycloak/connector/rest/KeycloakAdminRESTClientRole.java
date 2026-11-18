@@ -18,6 +18,7 @@ package org.brokenloop.midpoint.keycloak.connector.rest;
 import org.brokenloop.midpoint.keycloak.connector.KeycloakClient;
 import org.brokenloop.midpoint.keycloak.connector.KeycloakConfiguration;
 import org.brokenloop.midpoint.keycloak.connector.KeycloakSchema;
+import org.brokenloop.midpoint.keycloak.connector.RoleDiff;
 import org.identityconnectors.common.logging.Log;
 import org.identityconnectors.framework.common.exceptions.AlreadyExistsException;
 import org.identityconnectors.framework.common.exceptions.InvalidAttributeValueException;
@@ -27,6 +28,7 @@ import org.keycloak.admin.client.Keycloak;
 import org.keycloak.admin.client.resource.ClientResource;
 import org.keycloak.admin.client.resource.ClientsResource;
 import org.keycloak.admin.client.resource.RealmResource;
+import org.keycloak.admin.client.resource.RoleResource;
 import org.keycloak.admin.client.resource.RolesResource;
 import org.keycloak.representations.idm.ClientRepresentation;
 import org.keycloak.representations.idm.RoleRepresentation;
@@ -78,11 +80,19 @@ public class KeycloakAdminRESTClientRole implements KeycloakClient.ClientRole {
 
     @Override
     public Uid createClientRole(KeycloakSchema schema, String realmName, Set<Attribute> createAttributes) throws AlreadyExistsException {
-        RoleRepresentation rep = toClientRoleRep(schema, createAttributes);
+        CompositeOps.CreateSplit split = CompositeOps.splitCreate(createAttributes);
+        Set<String> compositeRealm = split.realm();
+        Set<String> compositeClient = split.client();
+        Set<Attribute> roleAttributes = split.roleAttributes();
+
+        RoleRepresentation rep = toClientRoleRep(schema, roleAttributes);
 
         if (rep.getContainerId() == null || rep.getName() == null) {
             throw new InvalidAttributeValueException("Must define name for the clientRole object");
         }
+
+        // Validate the children up-front so an unknown child does not leave a half-created role behind.
+        RoleMappingOps.requireExisting(realm(realmName), compositeRealm, compositeClient);
 
         ClientResource clientResource = realm(realmName).clients().get(rep.getContainerId());
 
@@ -94,6 +104,11 @@ public class KeycloakAdminRESTClientRole implements KeycloakClient.ClientRole {
         if (rep.getAttributes() != null && !rep.getAttributes().isEmpty() && created.getAttributes().isEmpty()) {
             created.setAttributes(rep.getAttributes());
             realm(realmName).rolesById().updateRole(created.getId(), created);
+        }
+
+        if (!compositeRealm.isEmpty() || !compositeClient.isEmpty()) {
+            CompositeOps.apply(realm(realmName), clientResource.roles().get(created.getName()),
+                    new RoleDiff(compositeRealm, Set.of()), new RoleDiff(compositeClient, Set.of()));
         }
 
         return new Uid(created.getId(), new Name(getUniqueName(created)));
@@ -126,7 +141,7 @@ public class KeycloakAdminRESTClientRole implements KeycloakClient.ClientRole {
                 // Configured Attributes
                 Map<String, List<String>> attrs = newClientRole.getAttributes();
                 if (attrs == null) {
-                    attrs = new HashMap();
+                    attrs = new HashMap<>();
                 }
 
                 for (Object v : attr.getValue()) {
@@ -144,10 +159,21 @@ public class KeycloakAdminRESTClientRole implements KeycloakClient.ClientRole {
     @Override
     public void updateClientRole(KeycloakSchema schema, String realmName, Uid uid, Set<AttributeDelta> modifications, OperationOptions options) throws UnknownUidException {
         RoleRepresentation current = clientRole(realmName, uid);
+        // The delta may rename or move the role; the composites are read where it is stored now.
+        String storedContainerId = current.getContainerId();
+        String storedName = current.getName();
+        AttributeDelta compositeRealmDelta = null;
+        AttributeDelta compositeClientDelta = null;
 
         try {
             for (AttributeDelta delta : modifications) {
-                if (delta.getName().equals(Name.NAME)) {
+                if (delta.getName().equals(ATTR_COMPOSITE_REALM_ROLES)) {
+                    compositeRealmDelta = delta;
+
+                } else if (delta.getName().equals(ATTR_COMPOSITE_CLIENT_ROLES)) {
+                    compositeClientDelta = delta;
+
+                } else if (delta.getName().equals(Name.NAME)) {
                     String name = AttributeDeltaUtil.getAsStringValue(delta);
                     String[] split = name.split("/");
 
@@ -166,7 +192,7 @@ public class KeycloakAdminRESTClientRole implements KeycloakClient.ClientRole {
                     // Configured Attributes
                     Map<String, List<String>> attrs = current.getAttributes();
                     if (attrs == null) {
-                        attrs = new HashMap();
+                        attrs = new HashMap<>();
                     }
 
                     // First, we need to remove the attributes
@@ -198,8 +224,29 @@ public class KeycloakAdminRESTClientRole implements KeycloakClient.ClientRole {
                 }
             }
 
+            RoleDiff realmDiff = new RoleDiff(Set.of(), Set.of());
+            RoleDiff clientDiff = new RoleDiff(Set.of(), Set.of());
+            if (compositeRealmDelta != null || compositeClientDelta != null) {
+                CompositeOps.Children existing = CompositeOps.read(realm(realmName).clients().get(storedContainerId)
+                        .roles().get(storedName));
+                if (compositeRealmDelta != null) {
+                    realmDiff = CompositeOps.diff(existing.realm(), compositeRealmDelta);
+                }
+                if (compositeClientDelta != null) {
+                    clientDiff = CompositeOps.diff(existing.client(), compositeClientDelta);
+                }
+                CompositeOps.requireExisting(realm(realmName), realmDiff, clientDiff);
+            }
+
             // TODO Optimize update if no diff
             realm(realmName).rolesById().updateRole(current.getId(), current);
+
+            // The role may have been renamed, so look it up again by its (new) name.
+            if (compositeRealmDelta != null || compositeClientDelta != null) {
+                CompositeOps.apply(realm(realmName),
+                        realm(realmName).clients().get(current.getContainerId()).roles().get(current.getName()),
+                        realmDiff, clientDiff);
+            }
 
         } catch (NotFoundException e) {
             LOGGER.warn("Not found clientRole when updating. uid: {0}", uid);
@@ -331,6 +378,12 @@ public class KeycloakAdminRESTClientRole implements KeycloakClient.ClientRole {
             }
 
             builder.addAttribute(ATTR_ATTRIBUTES, genericAttributes);
+        }
+
+        if (allowPartialAttributeValues || attributesToGet != null) {
+            CompositeOps.addToObject(builder,
+                    realm(realmName).clients().get(rep.getContainerId()).roles().get(rep.getName()),
+                    attributesToGet, allowPartialAttributeValues);
         }
 
         return builder.build();

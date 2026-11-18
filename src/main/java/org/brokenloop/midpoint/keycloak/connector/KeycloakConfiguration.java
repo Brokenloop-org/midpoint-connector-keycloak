@@ -15,6 +15,11 @@
  */
 package org.brokenloop.midpoint.keycloak.connector;
 
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.LinkedHashSet;
+import java.util.Set;
+
 import org.identityconnectors.common.StringUtil;
 import org.identityconnectors.common.security.GuardedString;
 import org.identityconnectors.framework.common.exceptions.ConfigurationException;
@@ -49,6 +54,11 @@ public class KeycloakConfiguration extends AbstractConfiguration {
     private String httpProxyUser;
     private GuardedString httpProxyPassword;
     private String httpProxyScheme = "http";
+
+    private transient volatile Set<String> cachedIgnoredRoles;
+    private String[] ignoredRoles = {"default-roles-{realm}", "offline_access", "uma_authorization"};
+    private boolean logoutOnDisable;
+    private boolean userProfileSchemaEnabled;
 
     @ConfigurationProperty(
             order = 1,
@@ -149,6 +159,7 @@ public class KeycloakConfiguration extends AbstractConfiguration {
 
     public void setTargetRealmName(String targetRealmName) {
         this.targetRealmName = targetRealmName;
+        this.cachedIgnoredRoles = null;
     }
 
     @ConfigurationProperty(
@@ -337,6 +348,82 @@ public class KeycloakConfiguration extends AbstractConfiguration {
 
     public void setHttpProxyScheme(String httpProxyScheme) {
         this.httpProxyScheme = httpProxyScheme;
+    }
+
+    @ConfigurationProperty(
+            order = 21,
+            displayMessageKey = "Ignored Roles",
+            helpMessageKey = "Role names that are never read, added or removed by role mapping operations. " +
+                    "The placeholder {realm} is replaced with the target realm name. " +
+                    "Default: default-roles-{realm}, offline_access, uma_authorization.",
+            required = false,
+            confidential = false)
+    public String[] getIgnoredRoles() {
+        return ignoredRoles == null ? null : ignoredRoles.clone();
+    }
+
+    public void setIgnoredRoles(String[] ignoredRoles) {
+        this.ignoredRoles = ignoredRoles == null ? null : ignoredRoles.clone();
+        this.cachedIgnoredRoles = null;
+    }
+
+    /**
+     * Returns the resolved ignored role names, computed once and reused until the ignored roles or
+     * the target realm change. The returned set is unmodifiable.
+     */
+    public Set<String> ignoredRolesResolved() {
+        Set<String> cached = cachedIgnoredRoles;
+        if (cached == null) {
+            cached = Collections.unmodifiableSet(resolveIgnoredRoles());
+            cachedIgnoredRoles = cached;
+        }
+        return cached;
+    }
+
+    /**
+     * Returns the ignored role names with the {realm} placeholder resolved to the target realm name.
+     */
+    public Set<String> resolveIgnoredRoles() {
+        Set<String> resolved = new LinkedHashSet<>();
+        if (ignoredRoles == null) {
+            return resolved;
+        }
+        String realm = getTargetRealmName() == null ? "" : getTargetRealmName();
+        Arrays.stream(ignoredRoles)
+                .filter(r -> r != null)
+                .map(r -> r.replace("{realm}", realm))
+                .forEach(resolved::add);
+        return resolved;
+    }
+
+    @ConfigurationProperty(
+            order = 22,
+            displayMessageKey = "Logout On Disable",
+            helpMessageKey = "If yes, all sessions of a user are terminated when the user is disabled. " +
+                    "Default is no.",
+            required = false,
+            confidential = false)
+    public boolean isLogoutOnDisable() {
+        return logoutOnDisable;
+    }
+
+    public void setLogoutOnDisable(boolean logoutOnDisable) {
+        this.logoutOnDisable = logoutOnDisable;
+    }
+
+    @ConfigurationProperty(
+            order = 23,
+            displayMessageKey = "Enable User Profile Schema",
+            helpMessageKey = "If yes, user attributes declared in the realm's User Profile are added " +
+                    "to the user schema. Default is no.",
+            required = false,
+            confidential = false)
+    public boolean isUserProfileSchemaEnabled() {
+        return userProfileSchemaEnabled;
+    }
+
+    public void setUserProfileSchemaEnabled(boolean userProfileSchemaEnabled) {
+        this.userProfileSchemaEnabled = userProfileSchemaEnabled;
     }
 
     @Override
