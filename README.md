@@ -78,7 +78,7 @@ Semantics:
   without writing anything, because Keycloak does not enforce this and a shared identity
   breaks broker login for both users ([keycloak/keycloak#29317](https://github.com/keycloak/keycloak/issues/29317)).
 
-Service accounts that belong to the target realm itself (rather than `master`) are supported; they need the `realm-management` roles `query-users`, `view-users` and `manage-users` (`view-realm` is not required). The server version is then reported as `unknown`. Before Keycloak 26.8, such an account also needs `view-realm` to use the `organization` object class: without it Keycloak leaves `organizationsEnabled` out of the realm it returns, and the class is omitted from the schema.
+Service accounts that belong to the target realm itself (rather than `master`) are supported; they need the `realm-management` roles `query-users`, `view-users` and `manage-users` (`view-realm` is not required). The server version is then reported as `unknown`. Writing `federatedIdentities` also needs `view-identity-providers`: without it Keycloak answers 403 when a link is added. Before Keycloak 26.8, such an account also needs `view-realm` to use the `organization` object class: without it Keycloak leaves `organizationsEnabled` out of the realm it returns, and the class is omitted from the schema.
 
 ## Configuration
 
@@ -92,7 +92,7 @@ Options added in this fork, on top of those inherited from upstream:
 
 The Keycloak REST client uses a lenient JSON mapper: properties returned by the server
 that the admin client does not know about are ignored instead of failing the request.
-The admin client (26.0.12) is tested against Keycloak 26.5.7 and 26.8.1.
+The admin client (26.0.12) is tested against Keycloak 26.5.7, 26.7.4 and 26.8.1.
 
 ## Build
 
@@ -135,7 +135,7 @@ KC needs to be reachable at `http://localhost:8090` by default; override with
 
 ## Significant changes vs upstream
 
-- **Keycloak admin client upgraded to 26.0.12** (was stuck at 24.0.2), tested against Keycloak 26.5.7 and 26.8.1
+- **Keycloak admin client upgraded to 26.0.12** (was stuck at 24.0.2), tested against Keycloak 26.5.7, 26.7.4 and 26.8.1
 - **Java 17 minimum** (required by KC 26)
 - **`realmRole` object class** for provisioning realm-level roles
 - **`organization` object class** (KC 26+ feature, with graceful detection of server/realm enablement)

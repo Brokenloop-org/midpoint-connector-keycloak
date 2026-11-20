@@ -1,6 +1,7 @@
 package org.brokenloop.midpoint.keycloak.connector;
 
 import org.identityconnectors.common.security.GuardedString;
+import org.identityconnectors.framework.common.exceptions.AlreadyExistsException;
 import org.identityconnectors.framework.common.exceptions.ConnectorException;
 import org.identityconnectors.framework.common.objects.*;
 import org.junit.jupiter.api.AfterAll;
@@ -8,10 +9,13 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.keycloak.admin.client.Keycloak;
 import org.keycloak.representations.idm.ClientRepresentation;
+import org.keycloak.representations.idm.IdentityProviderRepresentation;
 import org.keycloak.representations.idm.RoleRepresentation;
 
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static org.brokenloop.midpoint.keycloak.connector.KeycloakUserHandler.USER_OBJECT_CLASS;
@@ -29,8 +33,19 @@ class KeycloakRealmScopedAccountIT extends AbstractKeycloakIT {
     @BeforeAll
     static void setup() {
         setupRealm(REALM);
+        try (Keycloak admin = adminClient()) {
+            IdentityProviderRepresentation idp = new IdentityProviderRepresentation();
+            idp.setAlias("idp-scoped");
+            idp.setProviderId("saml");
+            idp.setEnabled(true);
+            idp.setConfig(new HashMap<>(Map.of(
+                    "singleSignOnServiceUrl", "https://idp.example.com/sso",
+                    "entityId", "https://idp.example.com/entity")));
+            admin.realm(REALM).identityProviders().create(idp).close();
+        }
         createServiceAccount("svc-users", "query-users", "view-users", "manage-users");
         createServiceAccount("svc-no-profile", "view-clients");
+        createServiceAccount("svc-links", "query-users", "view-users", "manage-users", "view-identity-providers");
         setupRealm(ORG_REALM, true);
         // Before Keycloak 26.8 the realm representation a service account gets without view-realm leaves out
         // organizationsEnabled, so the connector cannot tell that organizations are on.
@@ -146,6 +161,48 @@ class KeycloakRealmScopedAccountIT extends AbstractKeycloakIT {
             assertNotNull(c.schema().findObjectClassInfo(KeycloakOrganizationHandler.ORGANIZATION_OBJECT_CLASS.getObjectClassValue()));
         } finally {
             c.dispose();
+        }
+    }
+
+    /** Linking an identity needs view-identity-providers on top of the user roles; Keycloak answers 403 without it. */
+    @Test
+    void identityLinksNeedViewIdentityProviders() {
+        KeycloakConnector c = connector(config("svc-links", false));
+        String link = "{\"identityProvider\":\"idp-scoped\",\"userId\":\"u-1\",\"userName\":\"u-1\"}";
+        try {
+            Set<Attribute> attrs = new HashSet<>();
+            attrs.add(new Name("linked-scoped"));
+            attrs.add(AttributeBuilder.build("federatedIdentities", link));
+            Uid uid = c.create(USER_OBJECT_CLASS, attrs, null);
+
+            ConnectorObject o = searchByUidWithAttrs(c, USER_OBJECT_CLASS, uid, "federatedIdentities");
+            assertEquals(List.of(link), o.getAttributeByName("federatedIdentities").getValue());
+
+            Set<Attribute> clash = new HashSet<>();
+            clash.add(new Name("clash-scoped"));
+            clash.add(AttributeBuilder.build("federatedIdentities", link));
+            assertThrows(AlreadyExistsException.class, () -> c.create(USER_OBJECT_CLASS, clash, null));
+
+            c.updateDelta(USER_OBJECT_CLASS, uid,
+                    Set.of(AttributeDeltaBuilder.build("federatedIdentities", List.of(), List.of(link))), null);
+            o = searchByUidWithAttrs(c, USER_OBJECT_CLASS, uid, "federatedIdentities");
+            Attribute a = o.getAttributeByName("federatedIdentities");
+            assertTrue(a == null || a.getValue() == null || a.getValue().isEmpty());
+        } finally {
+            c.dispose();
+        }
+
+        KeycloakConnector usersOnly = connector(config("svc-users", false));
+        try {
+            Set<Attribute> attrs = new HashSet<>();
+            attrs.add(new Name("unlinked-scoped"));
+            attrs.add(AttributeBuilder.build("federatedIdentities",
+                    "{\"identityProvider\":\"idp-scoped\",\"userId\":\"u-2\",\"userName\":\"u-2\"}"));
+            ConnectorException e = assertThrows(ConnectorException.class,
+                    () -> usersOnly.create(USER_OBJECT_CLASS, attrs, null));
+            assertTrue(e.getMessage().contains("403"), e.getMessage());
+        } finally {
+            usersOnly.dispose();
         }
     }
 }
