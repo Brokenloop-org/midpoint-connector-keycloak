@@ -68,6 +68,7 @@ public class KeycloakConfiguration extends AbstractConfiguration {
     private boolean logoutOnDisable;
     private boolean userProfileSchemaEnabled;
     private String[] completeAttributesOnSearch = {};
+    private transient volatile Set<String> cachedCompleteAttributesOnSearch;
 
     @ConfigurationProperty(
             order = 1,
@@ -449,10 +450,23 @@ public class KeycloakConfiguration extends AbstractConfiguration {
 
     public void setCompleteAttributesOnSearch(String[] completeAttributesOnSearch) {
         this.completeAttributesOnSearch = completeAttributesOnSearch == null ? new String[0] : completeAttributesOnSearch.clone();
+        this.cachedCompleteAttributesOnSearch = null;
     }
 
-    /** Trimmed, non-blank entries of {@code completeAttributesOnSearch}; never null. */
+    /**
+     * Trimmed, non-blank entries of {@code completeAttributesOnSearch}, computed once and reused until
+     * the property changes. Never null; the returned set is unmodifiable.
+     */
     public Set<String> completeAttributesOnSearchResolved() {
+        Set<String> cached = cachedCompleteAttributesOnSearch;
+        if (cached == null) {
+            cached = resolveCompleteAttributesOnSearch();
+            cachedCompleteAttributesOnSearch = cached;
+        }
+        return cached;
+    }
+
+    private Set<String> resolveCompleteAttributesOnSearch() {
         Set<String> resolved = new LinkedHashSet<>();
         if (completeAttributesOnSearch != null) {
             Arrays.stream(completeAttributesOnSearch)

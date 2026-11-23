@@ -216,4 +216,13 @@ class KeycloakConfigurationTest {
         ConfigurationException e = assertThrows(ConfigurationException.class, c::validate);
         assertTrue(e.getMessage().contains("RealmRoles, roles"), e.getMessage());
     }
+
+    @Test
+    void completeAttributesOnSearchResolvedIsReusedUntilChanged() {
+        KeycloakConfiguration c = config();
+        c.setCompleteAttributesOnSearch(new String[]{"realmRoles"});
+        assertSame(c.completeAttributesOnSearchResolved(), c.completeAttributesOnSearchResolved());
+        c.setCompleteAttributesOnSearch(new String[]{"groups"});
+        assertEquals(java.util.Set.of("groups"), c.completeAttributesOnSearchResolved());
+    }
 }

@@ -258,4 +258,18 @@ class KeycloakPartialValuesIT extends AbstractKeycloakIT {
             c.dispose();
         }
     }
+
+    @Test
+    void listedAttributeIsCompleteOnPartialGetByName() {
+        KeycloakConnector c = connectorCompleting("realmRoles");
+        try {
+            List<ConnectorObject> results = new ArrayList<>();
+            c.executeQuery(USER_OBJECT_CLASS, KeycloakFilter.By(new Name("alice")), results::add,
+                    ConnIdTestFixtures.optionsWithPartialValues());
+            assertEquals(1, results.size());
+            assertComplete(results.get(0), "realmRoles", "role-a");
+        } finally {
+            c.dispose();
+        }
+    }
 }
