@@ -226,4 +226,36 @@ class KeycloakPartialValuesIT extends AbstractKeycloakIT {
             c.dispose();
         }
     }
+
+    @Test
+    void listedAttributeIsCompleteWhenDefaultAttributesAreRequested() {
+        KeycloakConnector c = connectorCompleting("realmRoles");
+        try {
+            OperationOptions options = new OperationOptionsBuilder()
+                    .setAllowPartialAttributeValues(true)
+                    .setReturnDefaultAttributes(true)
+                    .build();
+            ConnectorObject alice = findUser(c, "alice", options);
+            assertComplete(alice, "realmRoles", "role-a");
+            assertIncompleteAttr(alice, "groups");
+        } finally {
+            c.dispose();
+        }
+    }
+
+    @Test
+    void listedAttributeIsCompleteWhenDefaultAttributesPlusOthersAreRequested() {
+        KeycloakConnector c = connectorCompleting("realmRoles");
+        try {
+            OperationOptions options = new OperationOptionsBuilder()
+                    .setAllowPartialAttributeValues(true)
+                    .setReturnDefaultAttributes(true)
+                    .setAttributesToGet("clientRoles")
+                    .build();
+            ConnectorObject alice = findUser(c, "alice", options);
+            assertComplete(alice, "realmRoles", "role-a");
+        } finally {
+            c.dispose();
+        }
+    }
 }

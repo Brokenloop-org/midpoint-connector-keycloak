@@ -32,7 +32,11 @@ because it re-enters classification. The connector has to be able to return the 
 - For each listed attribute, when partial values are allowed and `attributesToGet` is null or
   contains the attribute: read the values exactly as the non-partial path does (same Keycloak
   calls, same `ignoredRoles` filtering for roles, same value formats) and return them as complete.
-- If `attributesToGet` is non-null and leaves the attribute out, keep today's INCOMPLETE marker.
+- When `RETURN_DEFAULT_ATTRIBUTES` is true on a partial read, listed attributes count as returned by
+  default: they are added to the full `attributesToGet` the connector builds (`KeycloakUserHandler.query`).
+  Added after the final review, since midPoint sends that option and the defaults set never contains them.
+- Only an explicit `attributesToGet` without the default attributes that leaves an attribute out keeps
+  today's INCOMPLETE marker.
 - Attributes that are not listed keep today's behaviour.
 - When both `realmRoles` and `clientRoles` are listed, each is read with its own call, as the
   non-partial path does today (builder's call whether to share one `getAll()` call).
@@ -50,4 +54,4 @@ because it re-enters classification. The connector has to be able to return the 
 As for 2.0.0 (#3, #4): this PR also sets `pom.xml` to `2.0.1` and the README version references.
 After it merges, tag `v2.0.1` on main (triggers `release.yml`), then a follow-up PR moves to
 `2.0.2-SNAPSHOT`. Tagging and the follow-up need the user's go-ahead.
-Public repo: generic wording only. Maven runs with `-s m2-settings.xml`.
+Public repo: generic wording only.
