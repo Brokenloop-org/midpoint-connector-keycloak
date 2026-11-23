@@ -206,4 +206,14 @@ class KeycloakConfigurationTest {
         assertTrue(e.getMessage().contains("RealmRoles"), e.getMessage());
         assertTrue(e.getMessage().contains("groups, realmRoles, clientRoles, federatedIdentities"), e.getMessage());
     }
+
+    @Test
+    void validate_severalUnknownCompletableAttributes_reportsAll() {
+        KeycloakConfiguration c = config();
+        c.setUsername("admin");
+        c.setPassword(new GuardedString("pass".toCharArray()));
+        c.setCompleteAttributesOnSearch(new String[]{"RealmRoles", "groups", "roles"});
+        ConfigurationException e = assertThrows(ConfigurationException.class, c::validate);
+        assertTrue(e.getMessage().contains("RealmRoles, roles"), e.getMessage());
+    }
 }

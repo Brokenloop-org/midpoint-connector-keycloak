@@ -20,6 +20,7 @@ import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.identityconnectors.common.StringUtil;
 import org.identityconnectors.common.security.GuardedString;
@@ -471,11 +472,12 @@ public class KeycloakConfiguration extends AbstractConfiguration {
             throw new ConfigurationException(
                     "Invalid client credential: need to setup username/password or client secret.");
         }
-        for (String attr : completeAttributesOnSearchResolved()) {
-            if (!COMPLETABLE_USER_ATTRIBUTES.contains(attr)) {
-                throw new ConfigurationException("Unknown attribute in completeAttributesOnSearch: " + attr +
-                        ". Allowed: " + String.join(", ", COMPLETABLE));
-            }
+        List<String> unknown = completeAttributesOnSearchResolved().stream()
+                .filter(a -> !COMPLETABLE_USER_ATTRIBUTES.contains(a))
+                .collect(Collectors.toList());
+        if (!unknown.isEmpty()) {
+            throw new ConfigurationException("Unknown attribute(s) in completeAttributesOnSearch: " +
+                    String.join(", ", unknown) + ". Allowed: " + String.join(", ", COMPLETABLE));
         }
     }
 }
