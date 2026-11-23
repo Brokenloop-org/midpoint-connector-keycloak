@@ -65,6 +65,7 @@ Semantics:
   option). `requiredActions` is part of the user representation and is returned by default.
 - When `allowPartialAttributeValues` is requested, the role, composite and
   `federatedIdentities` attributes are returned as `INCOMPLETE` (without values), as `groups` is.
+  User attributes listed in `completeAttributesOnSearch` (see below) are returned with their values instead.
 - Roles listed in `ignoredRoles` (see below) are never read, added or removed by user and
   group role mappings. The list does not apply to composites. For client roles an entry
   matches only the full `<clientUUID>/<roleName>` value.
@@ -89,6 +90,7 @@ Options added in this fork, on top of those inherited from upstream:
 | `ignoredRoles` | `default-roles-{realm}`, `offline_access`, `uma_authorization` | Role names that are never read, added or removed by role-mapping operations. `{realm}` is replaced with the target realm name. |
 | `logoutOnDisable` | `false` | When `true`, all sessions of a user are terminated when the user is disabled. |
 | `userProfileSchemaEnabled` | `false` | When `true`, user attributes declared in the realm's User Profile are added to the `user` schema. Explicitly configured user attributes that are missing from the User Profile are reported with a warning. If the User Profile cannot be read, an error is logged and the connector's `test` operation fails; the service account needs `query-users` (granted by `view-users` or `manage-users`) or `view-realm`. |
+| `completeAttributesOnSearch` | (none) | User attributes returned with their values even when `allowPartialAttributeValues` is requested (midPoint requests it on every search), instead of as `INCOMPLETE` without values. Allowed: `groups`, `realmRoles`, `clientRoles`, `federatedIdentities`; any other name fails configuration validation. Applies to every user read with partial values (search and get by uid or name) unless `attributesToGet` lists other attributes but not this one. Each listed attribute costs one extra Keycloak call per user returned, so a search returning N users makes N extra calls per listed attribute. Use it when midPoint logic must see the value during a search, for example an object type classified by realm role. |
 
 The Keycloak REST client uses a lenient JSON mapper: properties returned by the server
 that the admin client does not know about are ignored instead of failing the request.
@@ -145,6 +147,7 @@ KC needs to be reachable at `http://localhost:8090` by default; override with
 - **Required actions** on users (`requiredActions`)
 - **Optional session logout on disable** (`logoutOnDisable`)
 - **User Profile schema**: user attributes derived from the realm User Profile (`userProfileSchemaEnabled`)
+- **Opt-in complete values on partial reads** for `groups`, `realmRoles`, `clientRoles` and `federatedIdentities` (`completeAttributesOnSearch`)
 - **Built-in attribute names win**: entries in `userAttributes` or `groupAttributes` that collide with an attribute the connector defines itself (for example `requiredActions`, `realmRoles`, `clientRoles`, `federatedIdentities`) are skipped with a warning
 - **Bundled JAX-RS implementation**: the REST client installs its own RESTEasy runtime delegate, so it works inside hosts (such as midPoint) that expose a different JAX-RS implementation through the parent classloader
 - **Lenient JSON mapper** in the REST client: unknown properties in server responses are ignored
