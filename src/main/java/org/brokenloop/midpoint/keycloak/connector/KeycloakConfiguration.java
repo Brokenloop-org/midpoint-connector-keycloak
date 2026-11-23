@@ -18,6 +18,7 @@ package org.brokenloop.midpoint.keycloak.connector;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Set;
 
 import org.identityconnectors.common.StringUtil;
@@ -33,11 +34,11 @@ import org.identityconnectors.framework.spi.ConfigurationProperty;
  */
 public class KeycloakConfiguration extends AbstractConfiguration {
 
-    /** User attributes that {@code completeAttributesOnSearch} may list. */
-    public static final Set<String> COMPLETABLE_USER_ATTRIBUTES =
-            Set.of("groups", "realmRoles", "clientRoles", "federatedIdentities");
-    private static final String COMPLETABLE_USER_ATTRIBUTES_TEXT =
-            "groups, realmRoles, clientRoles, federatedIdentities";
+    /** User attributes that {@code completeAttributesOnSearch} may list, in the order error messages show them. */
+    private static final List<String> COMPLETABLE = List.of(
+            KeycloakUserHandler.ATTR_GROUPS, KeycloakUserHandler.ATTR_REALM_ROLES,
+            KeycloakUserHandler.ATTR_CLIENT_ROLES, KeycloakUserHandler.ATTR_FEDERATED_IDENTITIES);
+    public static final Set<String> COMPLETABLE_USER_ATTRIBUTES = Set.copyOf(COMPLETABLE);
 
     private String serverUrl;
     private String username;
@@ -473,7 +474,7 @@ public class KeycloakConfiguration extends AbstractConfiguration {
         for (String attr : completeAttributesOnSearchResolved()) {
             if (!COMPLETABLE_USER_ATTRIBUTES.contains(attr)) {
                 throw new ConfigurationException("Unknown attribute in completeAttributesOnSearch: " + attr +
-                        ". Allowed: " + COMPLETABLE_USER_ATTRIBUTES_TEXT);
+                        ". Allowed: " + String.join(", ", COMPLETABLE));
             }
         }
     }
