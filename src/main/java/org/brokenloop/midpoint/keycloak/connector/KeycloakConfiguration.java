@@ -33,6 +33,12 @@ import org.identityconnectors.framework.spi.ConfigurationProperty;
  */
 public class KeycloakConfiguration extends AbstractConfiguration {
 
+    /** User attributes that {@code completeAttributesOnSearch} may list. */
+    public static final Set<String> COMPLETABLE_USER_ATTRIBUTES =
+            Set.of("groups", "realmRoles", "clientRoles", "federatedIdentities");
+    private static final String COMPLETABLE_USER_ATTRIBUTES_TEXT =
+            "groups, realmRoles, clientRoles, federatedIdentities";
+
     private String serverUrl;
     private String username;
     private GuardedString password;
@@ -59,6 +65,7 @@ public class KeycloakConfiguration extends AbstractConfiguration {
     private String[] ignoredRoles = {"default-roles-{realm}", "offline_access", "uma_authorization"};
     private boolean logoutOnDisable;
     private boolean userProfileSchemaEnabled;
+    private String[] completeAttributesOnSearch = {};
 
     @ConfigurationProperty(
             order = 1,
@@ -426,6 +433,34 @@ public class KeycloakConfiguration extends AbstractConfiguration {
         this.userProfileSchemaEnabled = userProfileSchemaEnabled;
     }
 
+    @ConfigurationProperty(
+            order = 24,
+            displayMessageKey = "Complete Attributes On Search",
+            helpMessageKey = "User attributes (groups, realmRoles, clientRoles, federatedIdentities) returned " +
+                    "with their values even when partial attribute values are allowed. Each listed attribute " +
+                    "costs one extra Keycloak call per user returned. Default is none.",
+            required = false,
+            confidential = false)
+    public String[] getCompleteAttributesOnSearch() {
+        return completeAttributesOnSearch == null ? new String[0] : completeAttributesOnSearch.clone();
+    }
+
+    public void setCompleteAttributesOnSearch(String[] completeAttributesOnSearch) {
+        this.completeAttributesOnSearch = completeAttributesOnSearch == null ? new String[0] : completeAttributesOnSearch.clone();
+    }
+
+    /** Trimmed, non-blank entries of {@code completeAttributesOnSearch}; never null. */
+    public Set<String> completeAttributesOnSearchResolved() {
+        Set<String> resolved = new LinkedHashSet<>();
+        if (completeAttributesOnSearch != null) {
+            Arrays.stream(completeAttributesOnSearch)
+                    .filter(a -> a != null && !a.isBlank())
+                    .map(String::trim)
+                    .forEach(resolved::add);
+        }
+        return Collections.unmodifiableSet(resolved);
+    }
+
     @Override
     public void validate() {
         // Either username+password or clientSecret (with clientId) is required.
@@ -434,6 +469,12 @@ public class KeycloakConfiguration extends AbstractConfiguration {
         if (!hasUserPass && !hasClientSecret) {
             throw new ConfigurationException(
                     "Invalid client credential: need to setup username/password or client secret.");
+        }
+        for (String attr : completeAttributesOnSearchResolved()) {
+            if (!COMPLETABLE_USER_ATTRIBUTES.contains(attr)) {
+                throw new ConfigurationException("Unknown attribute in completeAttributesOnSearch: " + attr +
+                        ". Allowed: " + COMPLETABLE_USER_ATTRIBUTES_TEXT);
+            }
         }
     }
 }

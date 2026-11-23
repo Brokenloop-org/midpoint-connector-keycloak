@@ -160,4 +160,50 @@ class KeycloakConfigurationTest {
         assertFalse(c.isLogoutOnDisable());
         assertFalse(c.isUserProfileSchemaEnabled());
     }
+
+    // --- completeAttributesOnSearch ---
+
+    @Test
+    void completeAttributesOnSearchDefaultsToEmpty() {
+        KeycloakConfiguration c = config();
+        assertEquals(0, c.getCompleteAttributesOnSearch().length);
+        assertTrue(c.completeAttributesOnSearchResolved().isEmpty());
+    }
+
+    @Test
+    void completeAttributesOnSearchTrimsAndDropsBlanks() {
+        KeycloakConfiguration c = config();
+        c.setCompleteAttributesOnSearch(new String[]{" realmRoles ", "", null, "groups"});
+        assertEquals(java.util.Set.of("realmRoles", "groups"), c.completeAttributesOnSearchResolved());
+    }
+
+    @Test
+    void completeAttributesOnSearchIsCopiedInAndOut() {
+        String[] in = {"realmRoles"};
+        KeycloakConfiguration c = config();
+        c.setCompleteAttributesOnSearch(in);
+        in[0] = "groups";
+        assertArrayEquals(new String[]{"realmRoles"}, c.getCompleteAttributesOnSearch());
+        assertEquals(java.util.Set.of("realmRoles"), c.completeAttributesOnSearchResolved());
+    }
+
+    @Test
+    void validate_allCompletableAttributes_succeeds() {
+        KeycloakConfiguration c = config();
+        c.setUsername("admin");
+        c.setPassword(new GuardedString("pass".toCharArray()));
+        c.setCompleteAttributesOnSearch(new String[]{"groups", "realmRoles", "clientRoles", "federatedIdentities"});
+        assertDoesNotThrow(c::validate);
+    }
+
+    @Test
+    void validate_unknownCompletableAttribute_throws() {
+        KeycloakConfiguration c = config();
+        c.setUsername("admin");
+        c.setPassword(new GuardedString("pass".toCharArray()));
+        c.setCompleteAttributesOnSearch(new String[]{"realmRoles", "RealmRoles"});
+        ConfigurationException e = assertThrows(ConfigurationException.class, c::validate);
+        assertTrue(e.getMessage().contains("RealmRoles"), e.getMessage());
+        assertTrue(e.getMessage().contains("groups, realmRoles, clientRoles, federatedIdentities"), e.getMessage());
+    }
 }
