@@ -18,7 +18,9 @@ package org.brokenloop.midpoint.keycloak.connector;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.identityconnectors.common.StringUtil;
 import org.identityconnectors.common.security.GuardedString;
@@ -32,6 +34,12 @@ import org.identityconnectors.framework.spi.ConfigurationProperty;
  * @author Hiroyuki Wada
  */
 public class KeycloakConfiguration extends AbstractConfiguration {
+
+    /** User attributes that {@code completeAttributesOnSearch} may list, in the order error messages show them. */
+    private static final List<String> COMPLETABLE = List.of(
+            KeycloakUserHandler.ATTR_GROUPS, KeycloakUserHandler.ATTR_REALM_ROLES,
+            KeycloakUserHandler.ATTR_CLIENT_ROLES, KeycloakUserHandler.ATTR_FEDERATED_IDENTITIES);
+    public static final Set<String> COMPLETABLE_USER_ATTRIBUTES = Set.copyOf(COMPLETABLE);
 
     private String serverUrl;
     private String username;
@@ -59,6 +67,8 @@ public class KeycloakConfiguration extends AbstractConfiguration {
     private String[] ignoredRoles = {"default-roles-{realm}", "offline_access", "uma_authorization"};
     private boolean logoutOnDisable;
     private boolean userProfileSchemaEnabled;
+    private String[] completeAttributesOnSearch = {};
+    private transient volatile Set<String> cachedCompleteAttributesOnSearch;
 
     @ConfigurationProperty(
             order = 1,
@@ -426,6 +436,47 @@ public class KeycloakConfiguration extends AbstractConfiguration {
         this.userProfileSchemaEnabled = userProfileSchemaEnabled;
     }
 
+    @ConfigurationProperty(
+            order = 24,
+            displayMessageKey = "Complete Attributes On Search",
+            helpMessageKey = "User attributes (groups, realmRoles, clientRoles, federatedIdentities) returned " +
+                    "with their values even when partial attribute values are allowed. Each listed attribute " +
+                    "costs one extra Keycloak call per user returned. Default is none.",
+            required = false,
+            confidential = false)
+    public String[] getCompleteAttributesOnSearch() {
+        return completeAttributesOnSearch == null ? new String[0] : completeAttributesOnSearch.clone();
+    }
+
+    public void setCompleteAttributesOnSearch(String[] completeAttributesOnSearch) {
+        this.completeAttributesOnSearch = completeAttributesOnSearch == null ? new String[0] : completeAttributesOnSearch.clone();
+        this.cachedCompleteAttributesOnSearch = null;
+    }
+
+    /**
+     * Trimmed, non-blank entries of {@code completeAttributesOnSearch}, computed once and reused until
+     * the property changes. Never null; the returned set is unmodifiable.
+     */
+    public Set<String> completeAttributesOnSearchResolved() {
+        Set<String> cached = cachedCompleteAttributesOnSearch;
+        if (cached == null) {
+            cached = resolveCompleteAttributesOnSearch();
+            cachedCompleteAttributesOnSearch = cached;
+        }
+        return cached;
+    }
+
+    private Set<String> resolveCompleteAttributesOnSearch() {
+        Set<String> resolved = new LinkedHashSet<>();
+        if (completeAttributesOnSearch != null) {
+            Arrays.stream(completeAttributesOnSearch)
+                    .filter(a -> a != null && !a.isBlank())
+                    .map(String::trim)
+                    .forEach(resolved::add);
+        }
+        return Collections.unmodifiableSet(resolved);
+    }
+
     @Override
     public void validate() {
         // Either username+password or clientSecret (with clientId) is required.
@@ -434,6 +485,13 @@ public class KeycloakConfiguration extends AbstractConfiguration {
         if (!hasUserPass && !hasClientSecret) {
             throw new ConfigurationException(
                     "Invalid client credential: need to setup username/password or client secret.");
+        }
+        List<String> unknown = completeAttributesOnSearchResolved().stream()
+                .filter(a -> !COMPLETABLE_USER_ATTRIBUTES.contains(a))
+                .collect(Collectors.toList());
+        if (!unknown.isEmpty()) {
+            throw new ConfigurationException("Unknown attribute(s) in completeAttributesOnSearch: " +
+                    String.join(", ", unknown) + ". Allowed: " + String.join(", ", COMPLETABLE));
         }
     }
 }
