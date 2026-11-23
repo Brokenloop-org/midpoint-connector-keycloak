@@ -643,13 +643,14 @@ public class KeycloakAdminRESTUser implements KeycloakClient.User {
         }
 
         if (allowPartialAttributeValues) {
-            // Suppress fetching groups
-            LOGGER.ok("[{0}] Suppress fetching groups because return partial attribute values is requested", instanceName);
-
-            AttributeBuilder ab = new AttributeBuilder();
-            ab.setName(ATTR_GROUPS).setAttributeValueCompleteness(AttributeValueCompleteness.INCOMPLETE);
-            ab.addValue(Collections.emptyList());
-            builder.addAttribute(ab.build());
+            if (completeOnPartial(ATTR_GROUPS, attributesToGet)) {
+                LOGGER.ok("[{0}] Fetching groups because completeAttributesOnSearch lists it", instanceName);
+                builder.addAttribute(ATTR_GROUPS, readGroups(realmName, user));
+            } else {
+                // Suppress fetching groups
+                LOGGER.ok("[{0}] Suppress fetching groups because return partial attribute values is requested", instanceName);
+                builder.addAttribute(incomplete(ATTR_GROUPS));
+            }
         } else {
             if (attributesToGet == null) {
                 // Suppress fetching groups default
@@ -658,9 +659,7 @@ public class KeycloakAdminRESTUser implements KeycloakClient.User {
             } else if (shouldReturn(attributesToGet, ATTR_GROUPS)) {
                 // Fetch groups
                 LOGGER.ok("[{0}] Fetching groups because attributes to get is requested", instanceName);
-
-                List<GroupRepresentation> groups = users(realmName).get(user.getId()).groups();
-                builder.addAttribute(ATTR_GROUPS, groups.stream().map(g -> g.getId()).collect(Collectors.toList()));
+                builder.addAttribute(ATTR_GROUPS, readGroups(realmName, user));
             }
         }
 
@@ -673,35 +672,58 @@ public class KeycloakAdminRESTUser implements KeycloakClient.User {
     private void addRoleMappings(ConnectorObjectBuilder builder, String realmName, UserRepresentation user,
                                  Set<String> attributesToGet, boolean allowPartialAttributeValues) {
         for (String attrName : new String[]{ATTR_REALM_ROLES, ATTR_CLIENT_ROLES}) {
-            if (allowPartialAttributeValues) {
-                AttributeBuilder ab = new AttributeBuilder();
-                ab.setName(attrName).setAttributeValueCompleteness(AttributeValueCompleteness.INCOMPLETE);
-                ab.addValue(Collections.emptyList());
-                builder.addAttribute(ab.build());
-
-            } else if (attributesToGet != null && shouldReturn(attributesToGet, attrName)) {
-                Set<String> ignoredRoles = configuration.ignoredRolesResolved();
-                RoleMappingResource rm = users(realmName).get(user.getId()).roles();
-                Set<String> values = attrName.equals(ATTR_REALM_ROLES)
-                        ? RoleMappingOps.readRealm(rm, ignoredRoles)
-                        : RoleMappingOps.readClient(rm, ignoredRoles);
-                builder.addAttribute(attrName, new ArrayList<>(values));
+            boolean read = allowPartialAttributeValues
+                    ? completeOnPartial(attrName, attributesToGet)
+                    : attributesToGet != null && shouldReturn(attributesToGet, attrName);
+            if (read) {
+                builder.addAttribute(attrName, readRoleMappings(realmName, user, attrName));
+            } else if (allowPartialAttributeValues) {
+                builder.addAttribute(incomplete(attrName));
             }
         }
     }
 
     private void addFederatedIdentities(ConnectorObjectBuilder builder, String realmName, UserRepresentation user,
                                         Set<String> attributesToGet, boolean allowPartialAttributeValues) {
-        if (allowPartialAttributeValues) {
-            AttributeBuilder ab = new AttributeBuilder();
-            ab.setName(ATTR_FEDERATED_IDENTITIES).setAttributeValueCompleteness(AttributeValueCompleteness.INCOMPLETE);
-            ab.addValue(Collections.emptyList());
-            builder.addAttribute(ab.build());
-
-        } else if (attributesToGet != null && shouldReturn(attributesToGet, ATTR_FEDERATED_IDENTITIES)) {
-            List<String> values = FederatedIdentityOps.read(users(realmName).get(user.getId())).stream()
-                    .map(FederatedIdentityCodec::format).collect(Collectors.toList());
-            builder.addAttribute(ATTR_FEDERATED_IDENTITIES, values);
+        boolean read = allowPartialAttributeValues
+                ? completeOnPartial(ATTR_FEDERATED_IDENTITIES, attributesToGet)
+                : attributesToGet != null && shouldReturn(attributesToGet, ATTR_FEDERATED_IDENTITIES);
+        if (read) {
+            builder.addAttribute(ATTR_FEDERATED_IDENTITIES, readFederatedIdentities(realmName, user));
+        } else if (allowPartialAttributeValues) {
+            builder.addAttribute(incomplete(ATTR_FEDERATED_IDENTITIES));
         }
+    }
+
+    /** With partial values allowed, whether {@code completeAttributesOnSearch} asks for this attribute's values. */
+    private boolean completeOnPartial(String attrName, Set<String> attributesToGet) {
+        return configuration.completeAttributesOnSearchResolved().contains(attrName)
+                && (attributesToGet == null || attributesToGet.contains(attrName));
+    }
+
+    private static Attribute incomplete(String attrName) {
+        AttributeBuilder ab = new AttributeBuilder();
+        ab.setName(attrName).setAttributeValueCompleteness(AttributeValueCompleteness.INCOMPLETE);
+        ab.addValue(Collections.emptyList());
+        return ab.build();
+    }
+
+    private List<String> readGroups(String realmName, UserRepresentation user) {
+        List<GroupRepresentation> groups = users(realmName).get(user.getId()).groups();
+        return groups.stream().map(GroupRepresentation::getId).collect(Collectors.toList());
+    }
+
+    private List<String> readRoleMappings(String realmName, UserRepresentation user, String attrName) {
+        Set<String> ignoredRoles = configuration.ignoredRolesResolved();
+        RoleMappingResource rm = users(realmName).get(user.getId()).roles();
+        Set<String> values = attrName.equals(ATTR_REALM_ROLES)
+                ? RoleMappingOps.readRealm(rm, ignoredRoles)
+                : RoleMappingOps.readClient(rm, ignoredRoles);
+        return new ArrayList<>(values);
+    }
+
+    private List<String> readFederatedIdentities(String realmName, UserRepresentation user) {
+        return FederatedIdentityOps.read(users(realmName).get(user.getId())).stream()
+                .map(FederatedIdentityCodec::format).collect(Collectors.toList());
     }
 }

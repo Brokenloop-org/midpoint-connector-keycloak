@@ -24,6 +24,8 @@ import java.util.HashSet;
 import java.util.Set;
 
 import static org.brokenloop.midpoint.keycloak.connector.KeycloakUtils.createFullAttributesToGet;
+import static org.brokenloop.midpoint.keycloak.connector.KeycloakUtils.shouldAllowPartialAttributeValues;
+import static org.brokenloop.midpoint.keycloak.connector.KeycloakUtils.shouldReturnDefaultAttributes;
 
 /**
  * Handle keycloak user object.
@@ -260,6 +262,10 @@ public class KeycloakUserHandler extends AbstractKeycloakHandler {
     public void query(KeycloakFilter filter, ResultsHandler resultsHandler, OperationOptions options) {
         // Create full attributesToGet by RETURN_DEFAULT_ATTRIBUTES + ATTRIBUTES_TO_GET
         Set<String> attributesToGet = createFullAttributesToGet(schema.userSchema, options);
+        // On partial reads, attributes listed in completeAttributesOnSearch count as returned by default
+        if (attributesToGet != null && shouldReturnDefaultAttributes(options) && shouldAllowPartialAttributeValues(options)) {
+            attributesToGet.addAll(configuration.completeAttributesOnSearchResolved());
+        }
 
         if (filter == null) {
             client.user().getUsers(schema, configuration.getTargetRealmName(),
